@@ -1,0 +1,58 @@
+# ------------------------
+# Python cache / compiled
+# ------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ------------------------
+# Virtual environments
+# ------------------------
+.env
+env/
+venv/
+ENV/
+secrets.toml/
+env.bak/
+pyvenv.cfg
+
+
+# ------------------------
+# Model / cache files
+# ------------------------
+.model_cache/
+.cache/
+checkpoints/
+outputs/
+*.safetensors
+*.pt
+*.bin
+*.ckpt
+*.onnx
+*.h5
+*.pkl
+
+# ------------------------
+# OS / Editor
+# ------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ------------------------
+# Logs / misc
+# ------------------------
+*.log
+*.out
+*.tmp
+
+# ------------------------
+# Jupyter / Colab
+# ------------------------
+.ipynb_checkpoints/
+*.ipynb

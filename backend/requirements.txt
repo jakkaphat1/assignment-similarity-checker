@@ -1,0 +1,36 @@
+# Core
+numpy
+scikit-learn
+pandas
+
+# NLP & Embedding
+sentence-transformers
+transformers
+pythainlp
+ftfy
+huggingface-hub
+timm
+safetensors
+tokenizers
+
+# PyTorch (CPU)
+torch
+torchvision
+
+# PDF & Image
+pymupdf
+pdf2image
+pytesseract
+Pillow
+imagehash
+
+# Vector DB
+pinecone>=6.0.0
+
+# Utils
+python-slugify
+requests
+tqdm
+uvicorn
+fastapi
+python-dotenv

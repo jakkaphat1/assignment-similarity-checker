@@ -1,0 +1,5 @@
+#การ Activate venv
+.\{ชื่อ venv}\Scripts\Activate
+
+#การ Delete venv
+rm -r {ชื่อ venv}
