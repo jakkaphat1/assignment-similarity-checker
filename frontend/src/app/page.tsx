@@ -211,7 +211,8 @@ export default function Home() {
   }
 
   const handleClearAll = async () => {
-    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบเอกสารทั้งหมด?')) return
+    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบเอกสารทั้งหมด?')) 
+      return
     
     try {
       await axios.delete(`${API_BASE}/documents`)
@@ -656,7 +657,7 @@ export default function Home() {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-4">
                         <h3 className="text-lg font-medium text-gray-900">
-                          {result.doc_1} ↔ {result.doc_2}
+                          ไฟล์ {result.doc_1} vs {result.doc_2}
                         </h3>
                         <span className={`px-3 py-1 text-sm font-medium rounded-full border ${getLevelColor(result.level)}`}>
                           {result.level}
