@@ -35,3 +35,16 @@ async def signup(email: str = Form(...), password: str = Form(...)): #(...) ค�
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@router.post("/login")
+async def login(email: str = Form(...), password: str = Form(...)):
+    """Endpoint สำหรับการเข้าสู่ระบบ"""
+    try:
+        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        return {
+            "message" : "เข้าสู่ระบบสำเร็จ",
+            "access_token": res.session.access_token,
+            "token_type": "bearer"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid login credentials")
