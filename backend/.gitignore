@@ -55,4 +55,7 @@ Thumbs.db
 # Jupyter / Colab
 # ------------------------
 .ipynb_checkpoints/
-*.ipynb
+*.ipynb/
+
+
+.postgress

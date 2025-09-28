@@ -143,8 +143,6 @@ class EmbeddingManager:
 
         except Exception as e:
             print(f"❌ Error creating image embedding: {e}")
-            # Return zero vector on error
-            # CLIP ViT-B/32 outputs 512-dim
             return np.zeros(512, dtype=np.float32)
 
     def create_batch_text_embeddings(self, texts: list) -> np.ndarray:
