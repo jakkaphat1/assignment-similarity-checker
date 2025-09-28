@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from 'react'
-import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
-import { redirect } from 'next/navigation';
+import { useState, useCallback, useEffect } from 'react';
+import { useDropzone } from 'react-dropzone';
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
 import { 
   Upload, 
   FileText, 
@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Info
 } from 'lucide-react'
+
 
 interface DocumentResult {
   doc_id: string
@@ -63,12 +64,20 @@ interface Stats {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'
 
-export default function Home() {
+export default function DashboardPage() {
+
+
+  // handle access token
+  const router = useRouter();
+  // State สำหรับ Authentication
+  const [isLoading, setIsLoading] = useState(true);
+
   const [files, setFiles] = useState<File[]>([])
   const [templateFile, setTemplateFile] = useState<File | null>(null)
   const [processingMode, setProcessingMode] = useState<number>(1)
   const [useTemplate, setUseTemplate] = useState<boolean>(false)
-  const [isUploading, setIsUploading] = useState<boolean>(false)
+  // const [isUploading, setIsUploading] = useState<boolean>(false)
+  
   const [isComparing, setIsComparing] = useState<boolean>(false)
   const [uploadResults, setUploadResults] = useState<DocumentResult[]>([])
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([])
@@ -113,6 +122,33 @@ export default function Home() {
     multiple: false
   })
 
+
+
+
+
+
+
+
+
+  // ==========================================================
+  // ส่วนที่ 2: useEffect สำหรับจัดการ Logic ที่ต้องทำครั้งเดียว
+  // ==========================================================
+  useEffect(() =>{
+    const token = localStorage.getItem('access_token');
+
+    if (!token){
+      alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
+      router.push('/login');
+    }else{
+      setIsLoading(false);
+    }
+  }, [router]);
+
+
+
+  // ==========================================================
+  // ส่วนที่ 3: ฟังก์ชัน Helper และ Event Handlers
+  // ==========================================================
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index))
   }
@@ -132,7 +168,7 @@ export default function Home() {
       return
     }
 
-    setIsUploading(true)
+    setIsLoading(true)
     setUploadResults([])
     
     try {
@@ -166,7 +202,7 @@ export default function Home() {
       const errorMsg = error.response?.data?.detail || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์'
       alert(`ข้อผิดพลาด: ${errorMsg}`)
     } finally {
-      setIsUploading(false)
+      setIsLoading(false)
     }
   }
 
@@ -293,6 +329,20 @@ export default function Home() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }  
+
+  // ==========================================================
+  // ส่วนที่ 4: เงื่อนไขการแสดงผล (Conditional Rendering)
+  // ==========================================================
+  if (isLoading){
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-gray-400 mx-auto animate-spin" />
+          <p className="mt-4 text-gray-600">กำลังโหลด...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -464,10 +514,10 @@ export default function Home() {
               <div className="mt-6">
                 <button
                   onClick={handleUpload}
-                  disabled={files.length === 0 || isUploading || (useTemplate && !templateFile)}
+                  disabled={files.length === 0 || isLoading || (useTemplate && !templateFile)}
                   className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isUploading ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       กำลังประมวลผล...
