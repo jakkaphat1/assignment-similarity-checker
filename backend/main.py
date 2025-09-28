@@ -8,6 +8,8 @@ import shutil
 import tempfile
 import os
 from typing import List, Optional
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi import FastAPI, File, UploadFile
@@ -17,13 +19,16 @@ from fastapi.responses import JSONResponse
 import io
 import fitz
 
+from auth import router as auth_router
+
+
 app = FastAPI()
 
 
 # Initialize FastAPI app
 app = FastAPI(
     title="PDF Plagiarism Detection API",
-    version="1.0.0",
+    version="2.0.0",
     description="API for detecting plagiarism in PDF documents using text and image analysis"
 )
 
@@ -36,16 +41,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 # Global managers
 pdf_processor = None
 embedding_manager = None
 vector_db_manager = None
 
 
-@app.get("/login")
-async def login():
-    """Simple login endpoint (placeholder)"""
-    return {"message": "Login successful"}
+# @app.get("/login")
+# async def login():
+#     """Simple login endpoint (placeholder)"""
+#     return {"message": "Login successful"}
 
 
 @app.on_event("startup")
