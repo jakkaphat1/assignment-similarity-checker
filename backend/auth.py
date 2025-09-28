@@ -2,7 +2,7 @@ from fastapi import APIRouter, Form, HTTPException, Depends, Header
 from typing import Optional
 
 from supabase_client import supabase
-
+from schemas import UserCreate, UserLogin
 
 # สร้าง router สำหรับ authentication
 router = APIRouter(
