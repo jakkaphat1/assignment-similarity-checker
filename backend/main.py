@@ -11,7 +11,7 @@ from typing import List, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse
 import uvicorn
@@ -20,7 +20,9 @@ import io
 import fitz
 
 from auth import router as auth_router
-
+from auth import get_current_user
+from supabase_client import supabase
+from utils import to_ascii_id
 
 app = FastAPI()
 
@@ -103,6 +105,61 @@ async def health_check():
         "vector_db": "connected" if vector_db_manager and vector_db_manager.is_connected() else "disconnected",
         "pdf_processor": "ready" if pdf_processor else "not ready"
     }
+
+
+# /upload to Supabase bucket
+@app.post("/upload")
+async def upload_files_and_save_to_supabase(
+    files: List[UploadFile] = File(...),
+    current_user=Depends(get_current_user)
+):
+    user_id = current_user.id
+    bucket_name = "pdf-files"
+    results = []
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for file in files:
+            file_path = Path(temp_dir) / file.filename
+
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+
+            # Upload ขึ้น Supabase bucket
+            supabase.storage.from_(bucket_name).upload(
+                path=storage.path,
+                file=file_content,
+                file_options={
+                    "content_type": "application/pdf",
+                }
+            )
+
+            documents_data = {
+                "file_name": file.filename,
+                "doc_id_slug": to_ascii_id(file.filename),
+                "storage_path": storage_path,
+                "owner_id": user_id  # <-- จะได้บอกว่าไฟล์นี้เป็นของใคร
+            }
+
+            # บันทึกข้อมูลลงในตาราง documents ใน supabase
+            db_response = supabase.table(
+                "documents").insert(documents_data).execute()
+
+            results.append({
+                "file_name": file.filename,
+                "status": "success",
+                "data": db_response.data[0]
+
+            })
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
+    finally:
+        shutil.rmtree(temp_dir)     #<-- ให้ลบ folder tempfile ทิ้งเสมอไม่ว่าจะสำเร็จหรือไม่
+    return {"message": "Files uploaded successfully", "results": results}
 
 
 @app.post("/upload-pdfs")
