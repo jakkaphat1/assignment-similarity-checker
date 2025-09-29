@@ -134,7 +134,7 @@ export default function DashboardPage() {
   // ส่วนที่ 2: useEffect สำหรับจัดการ Logic ที่ต้องทำครั้งเดียว
   // ==========================================================
   useEffect(() =>{
-    const token = localStorage.getItem('access_token');
+    const token = sessionStorage.getItem('access_token');
 
     if (!token){
       alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
