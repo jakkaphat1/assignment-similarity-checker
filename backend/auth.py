@@ -32,11 +32,17 @@ async def signup(user_data: UserCreate):
         res = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
+            "options": {
+                "data": {
+                    "full_name": user_data.full_name
+                }
+            }
         })
         return {
-            "message": "สมัครสมาชิกสำเร็จ", 
+            "message": "สมัครสมาชิกสำเร็จ",
             "user_id": res.user.id,
-            "email": res.user.email
+            "email": res.user.email,
+            "full_name": res.user.user_metadata.get("full_name")
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
