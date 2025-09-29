@@ -8,6 +8,7 @@ export default function SignupPage(){
   const router = useRouter();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [full_name, setFullName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -23,7 +24,7 @@ export default function SignupPage(){
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password , full_name}),
       });
 
     const data = await response.json();
@@ -51,6 +52,20 @@ export default function SignupPage(){
         
         {error && <p className={styles.error}>{error}</p>}
         
+        <div className={styles.inputGroup}>
+          <label htmlFor="fullName">Full Name</label>
+          <input
+            id="fullName"
+            type="text"
+            value={full_name}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            className={styles.input}
+          />
+        </div>
+
+
+
         <div className={styles.inputGroup}>
           <label htmlFor="email">Email</label>
           <input
