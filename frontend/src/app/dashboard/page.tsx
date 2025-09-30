@@ -168,12 +168,27 @@ export default function DashboardPage() {
       return
     }
 
+
+    //ย้ายโค้ด
+    const token = sessionStorage.getItem('access_token');
+    if (!token) {
+    alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
+    router.push('/login');
+    return;
+  }
+
     setIsLoading(true)
     setUploadResults([])
     
     try {
       const formData = new FormData()
-      
+      const token = sessionStorage.getItem('access_token');
+
+      if (!token) {
+        alert('Authentication error. Please log in again.');
+        router.push('/login');
+      return;
+    }
       files.forEach(file => {
         formData.append('files', file)
       })
@@ -187,7 +202,8 @@ export default function DashboardPage() {
 
       const response = await axios.post(`${API_BASE}/upload-pdfs`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
         },
         timeout: 300000 // 5 minutes timeout
       })

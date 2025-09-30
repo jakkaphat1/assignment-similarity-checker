@@ -10,20 +10,39 @@ router = APIRouter(
     tags=["Authentication"]
 )
 
+#โค้ดเดิม
+# async def get_current_user(authorization: Optional[str] = Header(None)):
+#     """ตรวจสอบ JWT จาก Header และดึงข้อมูลจาก Supabase"""
 
+#     if authorization is None or not authorization.startswith("Bearer "):
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+
+#     token = authorization.split(" ")[1]  # เอา Bearer token ออก
+#     try:
+#         user_response = supabase.auth.get_user(token)
+#         return user_response.user
+#     except Exception as e:
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+#โค้ดใหม่
 async def get_current_user(authorization: Optional[str] = Header(None)):
-    """ตรวจสอบ JWT จาก Header และดึงข้อมูลจาก Supabase"""
-
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    token = authorization.split(" ")[1]  # เอา Bearer token ออก
+    token = authorization.split(" ")[1]
     try:
         user_response = supabase.auth.get_user(token)
-        return user_response.user
+        user = user_response.user
+        
+        # Debug
+        print(f"✅ User authenticated: {user.id}")
+        print(f"✅ Token: {token[:20]}...")
+        
+        return user
     except Exception as e:
+        print(f"❌ Auth failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
-
 
 @router.post("/signup")
 async def signup(user_data: UserCreate):

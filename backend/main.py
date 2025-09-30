@@ -1,3 +1,8 @@
+from supabase import create_client, Client
+from utils import to_ascii_id
+from supabase_client import supabase
+from auth import get_current_user
+from auth import router as auth_router
 from utils import cleanup_temp_dir, validate_pdf_files
 from vector_db import VectorDBManager
 from embedding import EmbeddingManager
@@ -11,18 +16,15 @@ from typing import List, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, Header
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse
 import uvicorn
 from fastapi.responses import JSONResponse
 import io
 import fitz
-
-from auth import router as auth_router
-from auth import get_current_user
-from supabase_client import supabase
-from utils import to_ascii_id
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI()
 
@@ -108,107 +110,93 @@ async def health_check():
 
 
 # /upload to Supabase bucket
-@app.post("/upload")
-async def upload_files_and_save_to_supabase(
-    files: List[UploadFile] = File(...),
-    current_user=Depends(get_current_user)
-):
-    user_id = current_user.id
-    bucket_name = "pdf-files"
-    results = []
+# @app.post("/upload")
+# async def upload_files_and_save_to_supabase(
+#     files: List[UploadFile] = File(...),
+#     current_user=Depends(get_current_user)
+# ):
+#     user_id = current_user.id
+#     bucket_name = "pdf-files"
+#     results = []
 
-    temp_dir = tempfile.mkdtemp()
-    try:
-        for file in files:
-            file_path = Path(temp_dir) / file.filename
+#     temp_dir = tempfile.mkdtemp()
+#     try:
+#         for file in files:
+#             file_path = Path(temp_dir) / file.filename
 
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+#             with open(file_path, "wb") as buffer:
+#                 shutil.copyfileobj(file.file, buffer)
 
-            with open(file_path, "rb") as f:
-                file_content = f.read()
+#             with open(file_path, "rb") as f:
+#                 file_content = f.read()
 
-            # Upload ขึ้น Supabase bucket
-            supabase.storage.from_(bucket_name).upload(
-                path=storage.path,
-                file=file_content,
-                file_options={
-                    "content_type": "application/pdf",
-                }
-            )
+#             # Upload ขึ้น Supabase bucket
+#             supabase.storage.from_(bucket_name).upload(
+#                 path=storage.path,
+#                 file=file_content,
+#                 file_options={
+#                     "content_type": "application/pdf",
+#                 }
+#             )
 
-            documents_data = {
-                "file_name": file.filename,
-                "doc_id_slug": to_ascii_id(file.filename),
-                "storage_path": storage_path,
-                "owner_id": user_id  # <-- จะได้บอกว่าไฟล์นี้เป็นของใคร
-            }
+#             documents_data = {
+#                 "file_name": file.filename,
+#                 "doc_id_slug": to_ascii_id(file.filename),
+#                 "storage_path": storage_path,
+#                 "owner_id": user_id  # <-- จะได้บอกว่าไฟล์นี้เป็นของใคร
+#             }
 
-            # บันทึกข้อมูลลงในตาราง documents ใน supabase
-            db_response = supabase.table(
-                "documents").insert(documents_data).execute()
+#             # บันทึกข้อมูลลงในตาราง documents ใน supabase
+#             db_response = supabase.table(
+#                 "documents").insert(documents_data).execute()
 
-            results.append({
-                "file_name": file.filename,
-                "status": "success",
-                "data": db_response.data[0]
+#             results.append({
+#                 "file_name": file.filename,
+#                 "status": "success",
+#                 "data": db_response.data[0]
 
-            })
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
-    finally:
-        shutil.rmtree(temp_dir)     #<-- ให้ลบ folder tempfile ทิ้งเสมอไม่ว่าจะสำเร็จหรือไม่
-    return {"message": "Files uploaded successfully", "results": results}
+#             })
 
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
+#     finally:
+#         shutil.rmtree(temp_dir)     #<-- ให้ลบ folder tempfile ทิ้งเสมอไม่ว่าจะสำเร็จหรือไม่
+#     return {"message": "Files uploaded successfully", "results": results}
 
+# new upload endpoint
+# code เดิม
 @app.post("/upload-pdfs")
-async def upload_pdfs(
+async def upload_and_process_pdfs_with_auth(
+    current_user=Depends(get_current_user),
+    # authorization: Optional[str] = Header(None),
+
+
     files: List[UploadFile] = File(...),
-    processing_mode: int = Form(
-        1, description="1=Text only, 2=Images only, 3=Both"),
-    use_template: bool = Form(
-        False, description="Use template to remove common text"),
+    processing_mode: int = Form(1, description="1=Text, 2=Images, 3=Both"),
+    use_template: bool = Form(False, description="Use template"),
     template_file: Optional[UploadFile] = File(
-        None, description="Template PDF file")
+        None, description="Template PDF")
 ):
     """
-    Upload and process PDF files
-
-    - **processing_mode**: 1 = Text only, 2 = Images only, 3 = Both text and images
-    - **use_template**: Whether to use a template file to remove common text
-    - **template_file**: Template PDF file (required if use_template is True)
+    รับไฟล์, ตรวจสอบสิทธิ์, บันทึกลง Supabase
     """
+
+    # current_user = await get_current_user(authorization)
+    user_id = current_user.id
+    bucket_name = "pdf-files"  # <-- ชื่อ Bucket บน Supabase
+    # token = authorization.split(" ")[1]
+
     if not pdf_processor or not embedding_manager or not vector_db_manager:
-        raise HTTPException(
-            status_code=503, detail="Service not ready. Please wait for initialization.")
-
-    # Validate processing mode
+        raise HTTPException(status_code=503, detail="Service not ready.")
     if processing_mode not in [1, 2, 3]:
-        raise HTTPException(
-            status_code=400, detail="Processing mode must be 1, 2, or 3")
-
-    # Validate files
+        raise HTTPException(status_code=400, detail="Invalid processing mode")
     validate_pdf_files(files)
-
-    # Validate template requirement
     if use_template and not template_file:
-        raise HTTPException(
-            status_code=400, detail="Template file is required when use_template is True")
+        raise HTTPException(status_code=400, detail="Template file required")
 
-    # Create temporary directory
     temp_dir = tempfile.mkdtemp(prefix="pdf_upload_")
-
     try:
-        # Save uploaded files
-        pdf_paths = []
-        for file in files:
-            file_path = os.path.join(temp_dir, file.filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            pdf_paths.append(file_path)
-
-        # Process template if provided
+        # supabase.auth.set_session(token)
         template_text = ""
         if use_template and template_file:
             template_path = os.path.join(temp_dir, template_file.filename)
@@ -216,40 +204,56 @@ async def upload_pdfs(
                 shutil.copyfileobj(template_file.file, buffer)
             template_text = pdf_processor.extract_template_text(template_path)
 
-        # Process each PDF
         results = []
-        for pdf_path in pdf_paths:
+
+        for file in files:
+            file_path_str = os.path.join(temp_dir, file.filename)
+            with open(file_path_str, "wb") as buffer:
+                file.file.seek(0)
+                shutil.copyfileobj(file.file, buffer)
+
             try:
+                with open(file_path_str, "rb") as f:
+                    file_content = f.read()
+                storage_path = f"{user_id}/{file.filename}"
+
+                supabase.storage.from_(bucket_name).upload(
+                    path=storage_path,
+                    file=file_content,
+                    # file_options={"contentType": "application/pdf"}
+                    file_options={"contentType": "application/pdf"}
+
+                )
+
+                document_data = {
+                    "file_name": file.filename,
+                    "doc_id_slug": to_ascii_id(file.filename),
+                    "storage_path": storage_path,
+                    "owner_id": user_id
+                }
+                supabase.table("documents").insert(document_data).execute()
+
                 result = await pdf_processor.process_pdf(
-                    pdf_path=pdf_path,
+                    pdf_path=file_path_str,
                     processing_mode=processing_mode,
-                    template_text=template_text if use_template else None,
+                    template_text=template_text,
                     vector_db=vector_db_manager
                 )
                 results.append(result)
 
             except Exception as e:
-                print(f"Error processing {pdf_path}: {e}")
+                print(f"Error processing {file.filename}: {e}")
                 results.append({
-                    "doc_id": os.path.basename(pdf_path).split('.')[0],
-                    "status": "error",
-                    "error": str(e)
+                    "doc_id": os.path.basename(file_path_str).split('.')[0],
+                    "status": "error", "error": str(e)
                 })
 
         return {
             "message": "Files processed successfully",
-            "processing_mode": processing_mode,
-            "use_template": use_template,
-            "total_files": len(files),
             "results": results
         }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Processing error: {str(e)}")
-
     finally:
-        # Clean up temporary directory
+        # supabase.auth.sign_out()
         cleanup_temp_dir(temp_dir)
 
 

@@ -6,5 +6,6 @@ load_dotenv()
 
 sb_url: str = os.environ.get("SUPABASE_URL")
 sb_key: str = os.environ.get("SUPABASE_KEY")
+sb_anon_key: str = os.environ.get("SUPABASE_ANON_KEY")
 
 supabase: Client = create_client(sb_url, sb_key)
