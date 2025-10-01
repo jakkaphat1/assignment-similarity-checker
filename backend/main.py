@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 import io
 import fitz
 from dotenv import load_dotenv
+from supabase_client import supabase, supabase_admin
 load_dotenv()
 
 app = FastAPI()
@@ -165,25 +166,118 @@ async def health_check():
 
 # new upload endpoint
 # code เดิม
+# @app.post("/upload-pdfs")
+# async def upload_and_process_pdfs_with_auth(
+#     current_user=Depends(get_current_user),
+#     # authorization: Optional[str] = Header(None),
+
+
+#     files: List[UploadFile] = File(...),
+#     processing_mode: int = Form(1, description="1=Text, 2=Images, 3=Both"),
+#     use_template: bool = Form(False, description="Use template"),
+#     template_file: Optional[UploadFile] = File(
+#         None, description="Template PDF")
+# ):
+#     """
+#     รับไฟล์, ตรวจสอบสิทธิ์, บันทึกลง Supabase
+#     """
+
+#     # current_user = await get_current_user(authorization)
+#     user_id = current_user.id
+#     bucket_name = "pdf.files"  # <-- ชื่อ Bucket บน Supabase
+#     # token = authorization.split(" ")[1]
+
+#     if not pdf_processor or not embedding_manager or not vector_db_manager:
+#         raise HTTPException(status_code=503, detail="Service not ready.")
+#     if processing_mode not in [1, 2, 3]:
+#         raise HTTPException(status_code=400, detail="Invalid processing mode")
+#     validate_pdf_files(files)
+#     if use_template and not template_file:
+#         raise HTTPException(status_code=400, detail="Template file required")
+
+#     temp_dir = tempfile.mkdtemp(prefix="pdf_upload_")
+#     try:
+#         # supabase.auth.set_session(token)
+#         supabase.postgrest.auth(os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+#         template_text = ""
+#         if use_template and template_file:
+#             template_path = os.path.join(temp_dir, template_file.filename)
+#             with open(template_path, "wb") as buffer:
+#                 shutil.copyfileobj(template_file.file, buffer)
+#             template_text = pdf_processor.extract_template_text(template_path)
+
+#         results = []
+
+#         for file in files:
+#             file_path_str = os.path.join(temp_dir, file.filename)
+#             with open(file_path_str, "wb") as buffer:
+#                 file.file.seek(0)
+#                 shutil.copyfileobj(file.file, buffer)
+
+#             try:
+#                 with open(file_path_str, "rb") as f:
+#                     file_content = f.read()
+#                 storage_path = f"{user_id}/{file.filename}"
+
+#                 supabase.storage.from_(bucket_name).upload(
+#                     path=storage_path,
+#                     file=file_content,
+#                     # file_options={"contentType": "application/pdf"}
+#                     file_options={"contentType": "application/pdf"}
+#                 )
+
+#                 document_data = {
+#                     "file_name": file.filename,
+#                     "doc_id_slug": to_ascii_id(file.filename),
+#                     "storage_path": storage_path,
+#                     "owner_id": user_id
+#                 }
+#                 supabase.table("documents").insert(document_data).execute()
+
+#                 result = await pdf_processor.process_pdf(
+#                     pdf_path=file_path_str,
+#                     processing_mode=processing_mode,
+#                     template_text=template_text,
+#                     vector_db=vector_db_manager
+#                 )
+#                 results.append(result)
+
+#             except Exception as e:
+#                 print(f"Error processing {file.filename}: {e}")
+#                 results.append({
+#                     "doc_id": os.path.basename(file_path_str).split('.')[0],
+#                     "status": "error", "error": str(e)
+#                 })
+
+#         return {
+#             "message": "Files processed successfully",
+#             "results": results
+#         }
+#     finally:
+#         # supabase.auth.sign_out()
+#         cleanup_temp_dir(temp_dir)
+
+#โค้ดใหม่
 @app.post("/upload-pdfs")
 async def upload_and_process_pdfs_with_auth(
     current_user=Depends(get_current_user),
-    # authorization: Optional[str] = Header(None),
-
-
+    authorization: Optional[str] = Header(None),
     files: List[UploadFile] = File(...),
-    processing_mode: int = Form(1, description="1=Text, 2=Images, 3=Both"),
-    use_template: bool = Form(False, description="Use template"),
-    template_file: Optional[UploadFile] = File(
-        None, description="Template PDF")
+    processing_mode: int = Form(1),
+    use_template: bool = Form(False),
+    template_file: Optional[UploadFile] = File(None)
 ):
+
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
     """
     รับไฟล์, ตรวจสอบสิทธิ์, บันทึกลง Supabase
     """
 
     # current_user = await get_current_user(authorization)
     user_id = current_user.id
-    bucket_name = "pdf-files"  # <-- ชื่อ Bucket บน Supabase
+    bucket_name = "assignments"  # <-- ชื่อ Bucket บน Supabase
     # token = authorization.split(" ")[1]
 
     if not pdf_processor or not embedding_manager or not vector_db_manager:
@@ -217,12 +311,11 @@ async def upload_and_process_pdfs_with_auth(
                     file_content = f.read()
                 storage_path = f"{user_id}/{file.filename}"
 
-                supabase.storage.from_(bucket_name).upload(
-                    path=storage_path,
-                    file=file_content,
-                    # file_options={"contentType": "application/pdf"}
-                    file_options={"contentType": "application/pdf"}
-
+                assert supabase_admin is not None, "Missing SUPABASE_SERVICE_ROLE_KEY in env"
+                supabase_admin.storage.from_(bucket_name).upload(   
+                path=storage_path,                         # f"{user_id}/{file.filename}" (ของเดิมถูกแล้ว)
+                file=file_content,
+                file_options={"contentType": "application/pdf"}
                 )
 
                 document_data = {
@@ -231,7 +324,7 @@ async def upload_and_process_pdfs_with_auth(
                     "storage_path": storage_path,
                     "owner_id": user_id
                 }
-                supabase.table("documents").insert(document_data).execute()
+                supabase_admin.table("documents").insert(document_data).execute()
 
                 result = await pdf_processor.process_pdf(
                     pdf_path=file_path_str,
