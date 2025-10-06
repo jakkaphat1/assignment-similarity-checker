@@ -587,20 +587,20 @@ export default function DashboardPage() {
                         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           {result.text_length !== undefined && (
                             <div>
-                              <span className="text-gray-500">ความยาวข้อความ:</span>
-                              <span className="ml-1 font-medium">{result.text_length.toLocaleString()} ตัวอักษร</span>
+                              <span className="text-black">ความยาวข้อความ:</span>
+                              <span className="text-black ml-1 font-medium">{result.text_length.toLocaleString()} ตัวอักษร</span>
                             </div>
                           )}
                           {result.image_count !== undefined && (
                             <div>
-                              <span className="text-gray-500">จำนวนรูปภาพ:</span>
-                              <span className="ml-1 font-medium">{result.image_count} รูป</span>
+                              <span className="text-black">จำนวนรูปภาพ :</span>
+                              <span className="text-black ml-1 font-medium">{result.image_count} รูป</span>
                             </div>
                           )}
                           {result.removed_text_length !== undefined && result.removed_text_length > 0 && (
                             <div>
-                              <span className="text-gray-500">ข้อความที่ลบ:</span>
-                              <span className="ml-1 font-medium">{result.removed_text_length.toLocaleString()} ตัวอักษร</span>
+                              <span className="text-black">ข้อความที่ลบ:</span>
+                              <span className="text-black ml-1 font-medium">{result.removed_text_length.toLocaleString()} ตัวอักษร</span>
                             </div>
                           )}
                         </div>
