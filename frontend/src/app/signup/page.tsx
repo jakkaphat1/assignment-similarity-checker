@@ -61,6 +61,7 @@ export default function SignupPage(){
             onChange={(e) => setFullName(e.target.value)}
             required
             className={styles.input}
+            
           />
         </div>
 
