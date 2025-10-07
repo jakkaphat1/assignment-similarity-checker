@@ -77,7 +77,7 @@ export default function DashboardPage() {
   const [processingMode, setProcessingMode] = useState<number>(1)
   const [useTemplate, setUseTemplate] = useState<boolean>(false)
   // const [isUploading, setIsUploading] = useState<boolean>(false)
-  
+  const [hasCompared, setHasCompared] = useState<boolean>(false);
   const [isComparing, setIsComparing] = useState<boolean>(false)
   const [uploadResults, setUploadResults] = useState<DocumentResult[]>([])
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([])
@@ -334,8 +334,8 @@ const handleUpload = useCallback (async () => {
 
 
 //new const handleCompare
-const handleCompare = useCallback (async () => {
-  if (documents.length < 2) {
+const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
+  if (docsToCompare.length < 2) {
     alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ');
     return;
   }
@@ -358,6 +358,7 @@ const handleCompare = useCallback (async () => {
     })
     // กันกรณี comparisons เป็น undefined/null
     setComparisonResults(response?.data?.comparisons ?? [])
+
   } catch (error: any) {
     console.error('Comparison error:', error)
     const errorMsg = error?.response?.data?.detail || error?.message || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
@@ -365,7 +366,7 @@ const handleCompare = useCallback (async () => {
   } finally {
     setIsComparing(false)
   }
-}, [documents, router]);
+}, [router]);
 
 //old const fetchDocuments
   // const fetchDocuments = async () => {
@@ -475,11 +476,13 @@ const handleCompare = useCallback (async () => {
 
   useEffect(() => {
     const readyDocs = documents.filter(doc => doc.status === 'success');
-    if (readyDocs.length >= 2 && !isComparing) {
-    console.log("useEffect: All documents are ready, starting comparison...");
-    handleCompare();
+    if (readyDocs.length >= 2 && !isComparing && !hasCompared) {
+    console.log("useEffect : Starting comparison");
+    setHasCompared(true);
+    handleCompare(readyDocs);
+    
   }
-}, [documents, isComparing, handleCompare]);
+}, [documents, isComparing,handleCompare, hasCompared]);
 
   // ==========================================================
   // ส่วนที่ 4: เงื่อนไขการแสดงผล (Conditional Rendering)
