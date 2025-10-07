@@ -308,7 +308,7 @@ async def upload_and_process_pdfs_with_auth(
             storage_path = f"{current_user.id}/{file.filename}"
 
             try:
-                supabase_admin.from_("documents_duplicate").insert({
+                supabase_admin.from_("documents_duplicate").upsert({
                     "file_name": file.filename,
                     "doc_id": doc_id,
                     "storage_path": storage_path,
