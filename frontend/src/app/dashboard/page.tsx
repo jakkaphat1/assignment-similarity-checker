@@ -156,103 +156,222 @@ export default function DashboardPage() {
   const removeTemplateFile = () => {
     setTemplateFile(null)
   }
+//old const handleUpload
+  // const handleUpload = async () => {
+  //   if (files.length < 2) {
+  //     alert('กรุณาเลือกอย่างน้อย 2 ไฟล์เพื่อทำการอัปโหลดและเปรียบเทียบ');
+  //     return;
+  //   }
 
-  const handleUpload = async () => {
-    if (files.length === 0) {
-      alert('กรุณาเลือกไฟล์ PDF อย่างน้อย 1 ไฟล์')
-      return
-    }
-
-    if (useTemplate && !templateFile) {
-      alert('กรุณาอัปโหลดไฟล์ Template')
-      return
-    }
+  //   if (useTemplate && !templateFile) {
+  //     alert('กรุณาอัปโหลดไฟล์ Template')
+  //     return
+  //   }
 
 
-    //ย้ายโค้ด
-    const token = sessionStorage.getItem('access_token');
-    if (!token) {
+  //   //ย้ายโค้ด
+  //   const token = sessionStorage.getItem('access_token');
+  //   if (!token) {
+  //     alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
+  //     router.push('/login');
+  //     return;
+  //   }
+
+  //   setIsLoading(true)
+  //   setUploadResults([])
+    
+  //   try {
+  //     const formData = new FormData()
+  //     const token = sessionStorage.getItem('access_token');
+
+  //     if (!token) {
+  //       alert('Authentication error. Please log in again.');
+  //       router.push('/login');
+  //     return;
+  //   }
+  //     files.forEach(file => {
+  //       formData.append('files', file)
+  //     })
+      
+  //     formData.append('processing_mode', processingMode.toString())
+  //     formData.append('use_template', useTemplate.toString())
+      
+  //     if (useTemplate && templateFile) {
+  //       formData.append('template_file', templateFile)
+  //     }
+
+  //     const response = await axios.post(`${API_BASE}/upload-pdfs`, formData, {
+  //       headers: {
+  //         'Content-Type': 'multipart/form-data',
+  //         'Authorization': `Bearer ${token}`
+  //       },
+  //       timeout: 300000 // 5 minutes timeout
+  //     })
+
+  //     setUploadResults(response.data.results)
+      
+  //     // Fetch updated document list
+  //     await fetchDocuments()
+      
+  //   } catch (error: any) {
+  //       console.error('Upload error:', error)
+  //       const errorMsg = error.response?.data?.detail || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์'
+  //       alert(`ข้อผิดพลาด: ${errorMsg}`)
+  //   } finally {
+  //       setIsLoading(false)
+  //   }
+  // }
+
+//new const handleUpload
+const handleUpload = async () => {
+  // 0) ต้องมีไฟล์อย่างน้อย 2 ไฟล์
+  if (files.length < 2) {
+    alert('กรุณาเลือกอย่างน้อย 2 ไฟล์เพื่อทำการอัปโหลดและเปรียบเทียบ');
+    return;
+  }
+
+  // 1) ถ้าเปิดใช้ Template ต้องมีไฟล์ Template
+  if (useTemplate && !templateFile) {
+    alert('กรุณาอัปโหลดไฟล์ Template');
+    return;
+  }
+
+  // 2) ต้องล็อกอินก่อน (มี token)
+  const token = sessionStorage.getItem('access_token');
+  if (!token) {
     alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
     router.push('/login');
     return;
   }
 
-    setIsLoading(true)
-    setUploadResults([])
-    
-    try {
-      const formData = new FormData()
-      const token = sessionStorage.getItem('access_token');
+  setIsLoading(true);
+  setUploadResults([]);
 
-      if (!token) {
-        alert('Authentication error. Please log in again.');
-        router.push('/login');
+  try {
+    // 3) เตรียมฟอร์มและแนบพารามิเตอร์
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    formData.append('processing_mode', processingMode.toString());
+    formData.append('use_template', useTemplate.toString());
+    if (useTemplate && templateFile) {
+      formData.append('template_file', templateFile);
+    }
+
+    // 4) อัปโหลด + ประมวลผล
+    const response = await axios.post(`${API_BASE}/upload-pdfs`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${token}`,
+      },
+      timeout: 300000, // 5 นาที
+    });
+
+    const docs = await fetchDocuments();
+    if ((docs?.length ?? 0) < 2) {
+      alert('เอกสารในระบบยังไม่ถึง 2 ไฟล์');
       return;
     }
-      files.forEach(file => {
-        formData.append('files', file)
-      })
-      
-      formData.append('processing_mode', processingMode.toString())
-      formData.append('use_template', useTemplate.toString())
-      
-      if (useTemplate && templateFile) {
-        formData.append('template_file', templateFile)
-      }
 
-      const response = await axios.post(`${API_BASE}/upload-pdfs`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        },
-        timeout: 300000 // 5 minutes timeout
-      })
+    // 5) โหลดรายการเอกสารล่าสุด แล้วเริ่มเปรียบเทียบอัตโนมัติ
+    await fetchDocuments();
+    // await handleCompare(); // ภายใน handleCompare ควรเช็คว่ามีเอกสาร ≥ 2
 
-      setUploadResults(response.data.results)
-      
-      // Fetch updated document list
-      await fetchDocuments()
-      
-    } catch (error: any) {
-      console.error('Upload error:', error)
-      const errorMsg = error.response?.data?.detail || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์'
-      alert(`ข้อผิดพลาด: ${errorMsg}`)
-    } finally {
-      setIsLoading(false)
-    }
+    // setFiles([]);
+    // if (templateFile) setTemplateFile(null);
+  } catch (error: any) {
+    console.error('Upload error:', error);
+    const errorMsg = error?.response?.data?.detail || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์';
+    alert(`ข้อผิดพลาด: ${errorMsg}`);
+  } finally {
+    setIsLoading(false);
   }
+};
 
-  const handleCompare = async () => {
-    if (documents.length < 2) {
-      alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ')
-      return
-    }
 
-    setIsComparing(true)
-    setComparisonResults([])
+//old const handleCompare
+  // const handleCompare = async () => {
+  //   if (documents.length < 2) {
+  //     alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ')
+  //     return
+  //   }
+
+  //   setIsComparing(true)
+  //   setComparisonResults([])
     
-    try {
-      const response = await axios.get(`${API_BASE}/compare`, {
-        timeout: 300000 // 5 minutes timeout
-      })
-      setComparisonResults(response.data.comparisons)
-    } catch (error: any) {
-      console.error('Comparison error:', error)
-      const errorMsg = error.response?.data?.detail || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
-      alert(`ข้อผิดพลาด: ${errorMsg}`)
-    } finally {
-      setIsComparing(false)
-    }
+  //   try {
+  //     const response = await axios.get(`${API_BASE}/compare`, {
+  //       timeout: 300000 // 5 minutes timeout
+  //     })
+  //     setComparisonResults(response.data.comparisons)
+  //   } catch (error: any) {
+  //       console.error('Comparison error:', error)
+  //       const errorMsg = error.response?.data?.detail || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
+  //       alert(`ข้อผิดพลาด: ${errorMsg}`)
+  //   } finally {
+  //       setIsComparing(false)
+  //   }
+  // }
+
+//new const handleCompare
+const handleCompare = async (skipCheck: boolean = false) => {
+  if (!skipCheck && documents.length < 2) {
+    alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ')
+    return
   }
 
-  const fetchDocuments = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/documents`)
-      setDocuments(response.data.documents)
-    } catch (error) {
-      console.error('Error fetching documents:', error)
-    }
+  // เช็คโทเค็นก่อนเรียก API
+  const token = sessionStorage.getItem('access_token')
+  if (!token) {
+    alert('กรุณาเข้าสู่ระบบก่อนใช้งาน')
+    router.push('/login')
+    return
   }
+
+  setIsComparing(true)
+  setComparisonResults([])
+  
+  try {
+    const response = await axios.get(`${API_BASE}/compare`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 300000 // 5 minutes timeout
+    })
+    // กันกรณี comparisons เป็น undefined/null
+    setComparisonResults(response?.data?.comparisons ?? [])
+  } catch (error: any) {
+    console.error('Comparison error:', error)
+    const errorMsg = error?.response?.data?.detail || error?.message || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
+    alert(`ข้อผิดพลาด: ${errorMsg}`)
+  } finally {
+    setIsComparing(false)
+  }
+}
+
+//old const fetchDocuments
+  // const fetchDocuments = async () => {
+  //   try {
+  //     const response = await axios.get(`${API_BASE}/documents`)
+  //     setDocuments(response.data.documents)
+  //   } catch (error) {
+  //     console.error('Error fetching documents:', error)
+  //   }
+  // }
+
+//new const fetchDocuments
+const fetchDocuments = async () => {
+  try {
+    const token = sessionStorage.getItem('access_token')
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    const res = await axios.get(`${API_BASE}/documents`, { headers })
+    const docs = res.data.documents ?? []
+    setDocuments(docs)
+    return docs               
+  } catch (error) {
+    console.error('Error fetching documents:', error)
+    return documents          // fallback: ค่าปัจจุบันใน state
+  }
+}
 
   const fetchStats = async () => {
     try {
@@ -346,6 +465,14 @@ export default function DashboardPage() {
     link.click()
     document.body.removeChild(link)
   }  
+
+  useEffect(() => {
+    // เริ่มเปรียบเทียบเมื่อมีเอกสารตั้งแต่ 2 ไฟล์ขึ้นไป 
+    // และยังไม่มีการเปรียบเทียบอื่นทำงานอยู่
+    if (documents.length >= 2 && !isComparing) {
+      handleCompare();
+    }
+  }, [documents]);
 
   // ==========================================================
   // ส่วนที่ 4: เงื่อนไขการแสดงผล (Conditional Rendering)
@@ -498,7 +625,8 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Selected Files */}
+
+              {/* Selected Files 
               {files.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">ไฟล์ที่เลือก ({files.length} ไฟล์)</h3>
@@ -525,6 +653,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
+*/}
 
               {/* Upload Button */}
               <div className="mt-6">
@@ -547,6 +676,12 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+
+
+
+
+
+
 
             {/* Upload Results */}
             {uploadResults.length > 0 && (
@@ -632,6 +767,35 @@ export default function DashboardPage() {
                 </button>
               </div>
               
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  ไฟล์ที่เลือก (รออัปโหลด) {files.length > 0 ? `• ${files.length} ไฟล์` : ''}
+                </h3>
+                {files.length > 0 ? (
+                  <div className="space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-indigo-50 rounded">
+                        <div className="flex items-center">
+                          <FileText className="w-4 h-4 text-indigo-600 mr-2" />
+                          <span className="text-sm text-gray-900 truncate">{file.name}</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <span className="text-xs text-gray-500">
+                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                          </span>
+                          <button onClick={() => removeFile(index)} className="text-red-600 hover:text-red-700">
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">ยังไม่มีไฟล์ที่เลือก</p>
+                )}
+                <div className="border-t mt-4 pt-4" />
+              </div>
+
               {documents.length > 0 ? (
                 <div className="space-y-2">
                   {documents.map((doc, index) => (
@@ -673,7 +837,8 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Compare Button */}
+{/*
+            
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <button
                 onClick={handleCompare}
@@ -700,7 +865,46 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+        
+*/}
         </div>
+      </div>
+
+      {/*new Upload and compare*/}
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+      <button
+            onClick={handleUpload} // ใช้ handleUpload เพราะภายในอัปโหลด + fetchDocuments + handleCompare ให้แล้ว
+            disabled={
+              isLoading || isComparing ||
+              files.length < 2 ||
+              (useTemplate && !templateFile)
+            }
+            className="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 text-white disabled:opacity-50 hover:bg-indigo-700 transition w-full justify-center"
+            aria-label="process-and-compare"
+            title={
+              files.length < 2
+                ? 'ต้องเลือกอย่างน้อย 2 ไฟล์'
+                : (useTemplate && !templateFile ? 'กรุณาอัปโหลด Template' : '')
+            }
+          >
+            {(isLoading || isComparing) ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                กำลังประมวลผล • เปรียบเทียบ...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                ประมวลผล และเปรียบเทียบเอกสาร
+              </>
+            )}
+          </button>
+            </div>
+
+
+
+
+
 
         {/* Comparison Results */}
         {comparisonResults.length > 0 && (
