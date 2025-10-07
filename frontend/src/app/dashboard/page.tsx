@@ -223,11 +223,32 @@ export default function DashboardPage() {
   //   }
   // }
 
+const fetchDocuments = useCallback (async () => {
+  try {
+    const token = sessionStorage.getItem('access_token')
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    const response = await axios.get<DocumentResult[]>(`${API_BASE}/documents`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setDocuments(response.data); 
+    } catch (error) {
+    console.error('Failed to fetch documents:', error);
+  }
+}, []);
+
+
 //new const handleUpload
-const handleUpload = async () => {
+const handleUpload = useCallback (async () => {
   // 0) ต้องมีไฟล์อย่างน้อย 2 ไฟล์
-  if (files.length < 2) {
-    alert('กรุณาเลือกอย่างน้อย 2 ไฟล์เพื่อทำการอัปโหลดและเปรียบเทียบ');
+  // if (files.length < 2) {
+  //   alert('กรุณาเลือกอย่างน้อย 2 ไฟล์เพื่อทำการอัปโหลดและเปรียบเทียบ');
+  //   return;
+  // }
+
+  if (files.length === 0) {
+    alert('กรุณาเลือกไฟล์ก่อนอัปโหลด');
     return;
   }
 
@@ -246,10 +267,11 @@ const handleUpload = async () => {
   }
 
   setIsLoading(true);
-  setUploadResults([]);
+  // setUploadResults([]);
 
   try {
     // 3) เตรียมฟอร์มและแนบพารามิเตอร์
+    const token = sessionStorage.getItem('access_token');
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     formData.append('processing_mode', processingMode.toString());
@@ -267,18 +289,15 @@ const handleUpload = async () => {
       timeout: 300000, // 5 นาที
     });
 
-    const docs = await fetchDocuments();
-    if ((docs?.length ?? 0) < 2) {
-      alert('เอกสารในระบบยังไม่ถึง 2 ไฟล์');
-      return;
-    }
+    // const docs = await fetchDocuments();
+    // if ((docs?.length ?? 0) < 2) {
+    //   alert('เอกสารในระบบยังไม่ถึง 2 ไฟล์');
+    //   return;
+    // }
 
-    // 5) โหลดรายการเอกสารล่าสุด แล้วเริ่มเปรียบเทียบอัตโนมัติ
     await fetchDocuments();
-    // await handleCompare(); // ภายใน handleCompare ควรเช็คว่ามีเอกสาร ≥ 2
-
     setFiles([]);
-    // if (templateFile) setTemplateFile(null);
+
   } catch (error: any) {
     console.error('Upload error:', error);
     const errorMsg = error?.response?.data?.detail || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์';
@@ -286,7 +305,7 @@ const handleUpload = async () => {
   } finally {
     setIsLoading(false);
   }
-};
+}, [files, processingMode, useTemplate, templateFile, fetchDocuments, router]);
 
 
 //old const handleCompare
@@ -313,6 +332,7 @@ const handleUpload = async () => {
   //   }
   // }
 
+
 //new const handleCompare
 const handleCompare = useCallback (async () => {
   if (documents.length < 2) {
@@ -329,7 +349,7 @@ const handleCompare = useCallback (async () => {
   }
 
   setIsComparing(true)
-  setComparisonResults([])
+  // setComparisonResults([])
   
   try {
     const response = await axios.get(`${API_BASE}/compare`, {
@@ -358,21 +378,7 @@ const handleCompare = useCallback (async () => {
   // }
 
 //new const fetchDocuments
-const fetchDocuments = async () => {
-  try {
-    const token = sessionStorage.getItem('access_token')
-    const headers: Record<string, string> = {}
-    if (token) headers.Authorization = `Bearer ${token}`
 
-    const res = await axios.get(`${API_BASE}/documents`, { headers })
-    const docs = res.data.documents ?? []
-    setDocuments(docs)
-    return docs               
-  } catch (error) {
-    console.error('Error fetching documents:', error)
-    return documents          // fallback: ค่าปัจจุบันใน state
-  }
-}
 
   const fetchStats = async () => {
     try {
