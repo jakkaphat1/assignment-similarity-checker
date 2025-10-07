@@ -81,7 +81,8 @@ export default function DashboardPage() {
   const [isComparing, setIsComparing] = useState<boolean>(false)
   const [uploadResults, setUploadResults] = useState<DocumentResult[]>([])
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([])
-  const [documents, setDocuments] = useState<string[]>([])
+  // const [documents, setDocuments] = useState<string[]>([])
+  const [documents, setDocuments] = useState<DocumentResult[]>([]);
   const [stats, setStats] = useState<Stats | null>(null)
   const [showStats, setShowStats] = useState<boolean>(false)
 
@@ -276,7 +277,7 @@ const handleUpload = async () => {
     await fetchDocuments();
     // await handleCompare(); // ภายใน handleCompare ควรเช็คว่ามีเอกสาร ≥ 2
 
-    // setFiles([]);
+    setFiles([]);
     // if (templateFile) setTemplateFile(null);
   } catch (error: any) {
     console.error('Upload error:', error);
@@ -313,10 +314,10 @@ const handleUpload = async () => {
   // }
 
 //new const handleCompare
-const handleCompare = async (skipCheck: boolean = false) => {
-  if (!skipCheck && documents.length < 2) {
-    alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ')
-    return
+const handleCompare = useCallback (async () => {
+  if (documents.length < 2) {
+    alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ');
+    return;
   }
 
   // เช็คโทเค็นก่อนเรียก API
@@ -344,7 +345,7 @@ const handleCompare = async (skipCheck: boolean = false) => {
   } finally {
     setIsComparing(false)
   }
-}
+}, [documents, router]);
 
 //old const fetchDocuments
   // const fetchDocuments = async () => {
@@ -467,12 +468,12 @@ const fetchDocuments = async () => {
   }  
 
   useEffect(() => {
-    // เริ่มเปรียบเทียบเมื่อมีเอกสารตั้งแต่ 2 ไฟล์ขึ้นไป 
-    // และยังไม่มีการเปรียบเทียบอื่นทำงานอยู่
-    if (documents.length >= 2 && !isComparing) {
-      handleCompare();
-    }
-  }, [documents]);
+    const readyDocs = documents.filter(doc => doc.status === 'success');
+    if (readyDocs.length >= 2 && !isComparing) {
+    console.log("useEffect: All documents are ready, starting comparison...");
+    handleCompare();
+  }
+}, [documents, isComparing, handleCompare]);
 
   // ==========================================================
   // ส่วนที่ 4: เงื่อนไขการแสดงผล (Conditional Rendering)
@@ -801,7 +802,7 @@ const fetchDocuments = async () => {
                   {documents.map((doc, index) => (
                     <div key={index} className="flex items-center p-2 bg-gray-50 rounded">
                       <FileText className="w-4 h-4 text-gray-600 mr-2" />
-                      <span className="text-sm text-gray-900 truncate">{doc}</span>
+                      <span className="font-medium">{doc.doc_id}</span>
                     </div>
                   ))}
                 </div>
