@@ -25,6 +25,9 @@ import io
 import fitz
 from dotenv import load_dotenv
 from supabase_client import supabase, supabase_admin
+from typing import List
+from schemas import DocumentResult
+from auth import get_current_user
 load_dotenv()
 
 app = FastAPI()
@@ -65,27 +68,26 @@ async def startup_event():
     """Initialize all components on startup"""
     global pdf_processor, embedding_manager, vector_db_manager
 
-    print("🚀 Starting PDF Plagiarism Detection API...")
+    print("Starting PDF Plagiarism Detection API...")
 
     try:
         # Initialize embedding manager
-        print("📚 Loading embedding models...")
+        print("Loading embedding models")
         embedding_manager = EmbeddingManager()
         await embedding_manager.initialize()
 
         # Initialize vector database
-        print("🗄️ Connecting to vector database...")
+        print("Connecting to vector database")
         vector_db_manager = VectorDBManager()
         await vector_db_manager.initialize()
 
         # Initialize PDF processor
-        print("📄 Setting up PDF processor...")
+        print("Setting up PDF processor")
         pdf_processor = PDFProcessor(embedding_manager)
 
-        print("✅ All components initialized successfully!")
-
+        print("All components is initialized")
     except Exception as e:
-        print(f"❌ Error during startup: {e}")
+        print(f"Error during startup: {e}")
         raise e
 
 
@@ -257,7 +259,7 @@ async def health_check():
 #         # supabase.auth.sign_out()
 #         cleanup_temp_dir(temp_dir)
 
-#โค้ดใหม่
+# โค้ดใหม่
 @app.post("/upload-pdfs")
 async def upload_and_process_pdfs_with_auth(
     current_user=Depends(get_current_user),
@@ -302,49 +304,69 @@ async def upload_and_process_pdfs_with_auth(
 
         for file in files:
             file_path_str = os.path.join(temp_dir, file.filename)
-            with open(file_path_str, "wb") as buffer:
-                file.file.seek(0)
-                shutil.copyfileobj(file.file, buffer)
+            doc_id = to_ascii_id(file.filename)
+            storage_path = f"{current_user.id}/{file.filename}"
 
             try:
+                supabase_admin.from_("documents_duplicate").insert({
+                    "file_name": file.filename,
+                    "doc_id": doc_id,
+                    "storage_path": storage_path,
+                    "user_id": current_user.id,
+                    "status": "processing",
+                    "processing_mode": processing_mode
+                }).execute()
+
+                # 2. PROCESS: ทำงานหนัก (อัปโหลดไป Storage และประมวลผล PDF)
+                with open(file_path_str, "wb") as buffer:
+                    file.file.seek(0)
+                    shutil.copyfileobj(file.file, buffer)
+                
                 with open(file_path_str, "rb") as f:
                     file_content = f.read()
-                storage_path = f"{user_id}/{file.filename}"
-
-                assert supabase_admin is not None, "Missing SUPABASE_SERVICE_ROLE_KEY in env"
-                supabase_admin.storage.from_(bucket_name).upload(   
-                path=storage_path,                         # f"{user_id}/{file.filename}" (ของเดิมถูกแล้ว)
-                file=file_content,
-                file_options={"contentType": "application/pdf"}
+                
+                print(f"⬆️ Uploading '{file.filename}' to Supabase Storage")
+                supabase_admin.storage.from_("assignments").upload(
+                    path=storage_path,
+                    file=file_content,
+                    file_options={"contentType": "application/pdf"}
                 )
-
-                document_data = {
-                    "file_name": file.filename,
-                    "doc_id_slug": to_ascii_id(file.filename),
-                    "storage_path": storage_path,
-                    "owner_id": user_id
-                }
-                supabase_admin.table("documents").insert(document_data).execute()
-
-                result = await pdf_processor.process_pdf(
+                
+                print(f"⚙️  Processing PDF content for '{doc_id}'")
+                # *** หมายเหตุ: ตรวจสอบชื่อพารามิเตอร์สุดท้ายให้ตรงกับฟังก์ชันของคุณ ***
+                # อาจจะเป็น vector_db= หรือ vector_db_manager=
+                metadata = await pdf_processor.process_pdf(
                     pdf_path=file_path_str,
+                    doc_id=doc_id,
                     processing_mode=processing_mode,
                     template_text=template_text,
                     vector_db=vector_db_manager
                 )
-                results.append(result)
+
+                # 3. UPDATE: นำผลลัพธ์มาอัปเดตแถวเดิมใน DB
+                print(f"Success for '{doc_id}'. Updating status to 'success'")
+                update_data = {
+                    "status": "success",
+                    "text_length": metadata.get("text_length"),
+                    "image_count": metadata.get("image_count"),
+                    "removed_text_length": metadata.get("removed_text_length")
+                }
+                supabase_admin.from_("documents_duplicate").update(update_data).eq("doc_id", doc_id).execute()
+                
+                results.append(metadata)
 
             except Exception as e:
-                print(f"Error processing {file.filename}: {e}")
-                results.append({
-                    "doc_id": os.path.basename(file_path_str).split('.')[0],
-                    "status": "error", "error": str(e)
-                })
+                # 4. ERROR HANDLING: หากเกิดข้อผิดพลาด ให้อัปเดตสถานะใน DB
+                error_message = str(e)
+                print(f"❌ Error on '{doc_id}': {error_message}. Updating status to 'error'...")
+                supabase_admin.from_("documents_duplicate").update({
+                    "status": "error", 
+                    "error": error_message
+                }).eq("doc_id", doc_id).execute()
 
-        return {
-            "message": "Files processed successfully",
-            "results": results
-        }
+                results.append({ "doc_id": doc_id, "status": "error", "error": error_message })
+        
+        return { "message": "All files processed", "results": results }
     finally:
         # supabase.auth.sign_out()
         cleanup_temp_dir(temp_dir)
@@ -403,27 +425,52 @@ async def compare_documents():
         raise HTTPException(
             status_code=500, detail=f"Comparison error: {str(e)}")
 
+#old def get_documents
+# @app.get("/documents, response_model=List[DocumentResult]")
+# async def get_documents(user=Depends(get_current_user)):
+#     """Get list of all processed documents"""
+#     if not pdf_processor:
+#         raise HTTPException(status_code=503, detail="Service not ready")
 
-@app.get("/documents")
-async def get_documents():
-    """Get list of all processed documents"""
-    if not pdf_processor:
-        raise HTTPException(status_code=503, detail="Service not ready")
+#     doc_ids = list(pdf_processor.get_document_ids())
 
-    doc_ids = list(pdf_processor.get_document_ids())
+#     # Get document stats
+#     document_details = []
+#     for doc_id in doc_ids:
+#         doc_info = pdf_processor.get_document_info(doc_id)
+#         if doc_info:
+#             document_details.append(doc_info)
 
-    # Get document stats
-    document_details = []
-    for doc_id in doc_ids:
-        doc_info = pdf_processor.get_document_info(doc_id)
-        if doc_info:
-            document_details.append(doc_info)
+#     return {
+#         "documents": doc_ids,
+#         "document_details": document_details,
+#         "count": len(doc_ids)
+#     }
+#new def get_documents
+@app.get("/documents", response_model=List[DocumentResult])
+async def get_documents(user=Depends(get_current_user)):
+    """ดึงรายการเอกสารทั้งหมดของผู้ใช้จากฐานข้อมูล Supabase โดยตรง"""
+    try:
+        # ใช้ supabase_admin เพื่อให้มีสิทธิ์อ่านข้อมูลจากฝั่ง server
+        print(f"ดีงข้อมูลของ Authen : {user.id} ")
+        
+        # สมมติว่าตารางของคุณชื่อ 'documents'
+        # และมีคอลัมน์ 'user_id' สำหรับระบุเจ้าของ
+        query_res = supabase_admin.from_("documents_duplicate") \
+                                  .select("doc_id, status, processing_mode, text_length, image_count, removed_text_length, error") \
+                                  .eq("user_id", user.id) \
+                                  .execute()
 
-    return {
-        "documents": doc_ids,
-        "document_details": document_details,
-        "count": len(doc_ids)
-    }
+        if query_res.data:
+            print(f"Found {len(query_res.data)} documents in Supabase.")
+            return query_res.data
+        else:
+            print("No documents found for this user in Supabase.")
+            return []
+
+    except Exception as e:
+        print(f"Error fetching documents from Supabase: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch documents from database.")
 
 
 @app.delete("/documents")

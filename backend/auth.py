@@ -38,7 +38,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         # Debug
         print(f"User authenticated: {user.id}")
         print(f"Header Token: {token[:30]}")
-        print(f"Last Token: {token[-30:]}")
+        print(f"Last Token: {token[-30:]}") 
 
         return user
     except Exception as e:
