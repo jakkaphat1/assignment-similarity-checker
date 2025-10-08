@@ -18,7 +18,8 @@ import {
   Loader2,
   BarChart3,
   RefreshCw,
-  Info
+  Info,
+  Eye,
 } from 'lucide-react'
 
 
@@ -85,6 +86,13 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [showStats, setShowStats] = useState<boolean>(false)
 
+  // Preview PDF 
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null)
+  const [previewName, setPreviewName] = useState<string>("")
+  const [previewIsBlob, setPreviewIsBlob] = useState(false)
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFiles = acceptedFiles.filter(file => file.type === 'application/pdf')
     if (pdfFiles.length !== acceptedFiles.length) {
@@ -122,7 +130,30 @@ export default function DashboardPage() {
     multiple: false
   })
 
+  const openPreviewFromFile = (file: File) => {
+    const url = URL.createObjectURL(file)
+    setPreviewSrc(url)
+    setPreviewBlobUrl(url)
+    setPreviewIsBlob(true)
+    setPreviewName(file.name)
+    setPreviewOpen(true)
+  }
 
+  const openPreviewRemote = (docId: string) => {
+    setPreviewSrc(`${API_BASE}/preview/${docId}`)
+    setPreviewIsBlob(false)
+    setPreviewBlobUrl(null)
+    setPreviewName(docId)
+    setPreviewOpen(true)
+  }
+
+  const closePreview = () => {
+    if (previewIsBlob && previewBlobUrl) URL.revokeObjectURL(previewBlobUrl)
+    setPreviewOpen(false)
+    setPreviewSrc(null)
+    setPreviewBlobUrl(null)
+    setPreviewIsBlob(false)
+  }
 
 
 
@@ -440,6 +471,15 @@ export default function DashboardPage() {
                             <FileText className="w-5 h-5 text-blue-600 mr-2" />
                             <span className="text-sm text-gray-700">{templateFile.name}</span>
                           </div>
+                          <div className="flex items-center gap-2">
+                            {/* NEW 👇 พรีวิว Template */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openPreviewFromFile(templateFile) }}
+                              className="text-gray-600 hover:text-gray-900"
+                              title="ดูพรีวิว Template"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -450,6 +490,7 @@ export default function DashboardPage() {
                             <XCircle className="w-4 h-4" />
                           </button>
                         </div>
+                      </div>
                       ) : (
                         <div>
                           <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -498,6 +539,15 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         </div>
+                        <div className="flex items-center gap-3">
+                          {/* NEW 👇 ปุ่มดูพรีวิวไฟล์ที่เลือก */}
+                          <button
+                            onClick={() => openPreviewFromFile(file)}
+                            className="text-gray-600 hover:text-gray-900"
+                            title="ดูพรีวิว"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </button>
                         <button
                           onClick={() => removeFile(index)}
                           className="text-red-600 hover:text-red-700"
@@ -505,6 +555,7 @@ export default function DashboardPage() {
                           <XCircle className="w-5 h-5" />
                         </button>
                       </div>
+                    </div>
                     ))}
                   </div>
                 </div>
@@ -777,6 +828,25 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+     {/* Modal Preview PDF */}
+      {previewOpen && previewSrc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white w-[50vw] max-w-[1000px] h-[85vh] rounded-lg shadow-xl overflow-hidden flex flex-col"> {/* CHANGED */}
+            <div className="px-4 py-2 border-b flex items-center justify-between">
+              <h3 className="font-medium text-gray-900 truncate">{previewName}</h3>
+              <button onClick={closePreview} className="text-gray-600 hover:text-gray-900">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <iframe
+              src={previewSrc}
+              title="PDF Preview"
+              className="w-full h-full"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
