@@ -679,9 +679,11 @@ const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
                     </>
                   ) : (
                     <>
+                    
                       <Upload className="w-5 h-5 mr-2" />
                       อัปโหลดและประมวลผล
                     </>
+
                   )}
                 </button>
               </div>

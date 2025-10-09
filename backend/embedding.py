@@ -23,20 +23,20 @@ class EmbeddingManager:
         self._initialized = False
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        print(f"🖥️ Using device: {self._device}")
+        print(f"Using device: {self._device}")
 
     async def initialize(self):
         if self._initialized:
             return
 
         try:
-            print("📚 Loading LaBSE model for text embeddings...")
+            print("Loading LaBSE model for text embeddings")
             self.labse_model = SentenceTransformer(
                 'sentence-transformers/LaBSE',
                 cache_folder=self.cache_dir  # ใช้ cache
             )
 
-            print("🖼️ Loading CLIP model for image embeddings...")
+            print("Loading CLIP model for image embeddings")
             self.clip_model = CLIPModel.from_pretrained(
                 "openai/clip-vit-large-patch14",
                 cache_dir=self.cache_dir  # ใช้ cache
@@ -50,16 +50,16 @@ class EmbeddingManager:
             await self._warmup_models()
 
             self._initialized = True
-            print("✅ All embedding models loaded successfully!")
+            print("All embedding models loaded successfully!")
 
         except Exception as e:
-            print(f"❌ Error initializing embedding models: {e}")
+            print(f"Error initializing embedding models: {e}")
             raise e
 
     async def _warmup_models(self):
         """Warm up models with dummy inputs for better performance"""
         try:
-            print("🔥 Warming up models...")
+            print("Warming up models")
 
             # Warm up LaBSE
             if self.labse_model:
@@ -75,10 +75,10 @@ class EmbeddingManager:
                 with torch.no_grad():
                     _ = self.clip_model.get_image_features(**inputs)
 
-            print("🔥 Model warmup completed!")
+            print("Model warmup completed!")
 
         except Exception as e:
-            print(f"⚠️ Warning: Model warmup failed: {e}")
+            print(f"Warning: Model warmup failed: {e}")
 
     def is_ready(self) -> bool:
         """Check if all models are initialized and ready"""
@@ -114,7 +114,7 @@ class EmbeddingManager:
             return embedding
 
         except Exception as e:
-            print(f"❌ Error creating text embedding: {e}")
+            print(f"Error creating text embedding: {e}")
             # Return zero vector on error
             return np.zeros(768, dtype=np.float32)
 

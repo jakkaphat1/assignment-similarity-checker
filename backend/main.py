@@ -325,14 +325,14 @@ async def upload_and_process_pdfs_with_auth(
                 with open(file_path_str, "rb") as f:
                     file_content = f.read()
                 
-                print(f"⬆️ Uploading '{file.filename}' to Supabase Storage")
+                print(f"Uploading '{file.filename}' to Supabase Storage")
                 supabase_admin.storage.from_("assignments").upload(
                     path=storage_path,
                     file=file_content,
                     file_options={"contentType": "application/pdf"}
                 )
                 
-                print(f"⚙️  Processing PDF content for '{doc_id}'")
+                print(f"Processing PDF content for '{doc_id}'")
                 # *** หมายเหตุ: ตรวจสอบชื่อพารามิเตอร์สุดท้ายให้ตรงกับฟังก์ชันของคุณ ***
                 # อาจจะเป็น vector_db= หรือ vector_db_manager=
                 metadata = await pdf_processor.process_pdf(
