@@ -5,7 +5,8 @@ from typing import Optional, Union
 from sentence_transformers import SentenceTransformer
 from transformers import CLIPModel, CLIPProcessor
 import asyncio
-
+import os
+from pathlib import Path
 from utils import l2norm
 
 
@@ -13,6 +14,9 @@ class EmbeddingManager:
     """Manage text and image embedding models"""
 
     def __init__(self):
+        self.cache_dir = os.getenv("HF_HOME", str(
+            Path.home() / ".cache" / "huggingface"))  # เพิ่มมาใหม่
+
         self.labse_model: Optional[SentenceTransformer] = None
         self.clip_model: Optional[CLIPModel] = None
         self.clip_processor: Optional[CLIPProcessor] = None
@@ -22,22 +26,25 @@ class EmbeddingManager:
         print(f"🖥️ Using device: {self._device}")
 
     async def initialize(self):
-        """Initialize all embedding models"""
         if self._initialized:
             return
 
         try:
             print("📚 Loading LaBSE model for text embeddings...")
             self.labse_model = SentenceTransformer(
-                'sentence-transformers/LaBSE')
-            self.labse_model.to(self._device)
+                'sentence-transformers/LaBSE',
+                cache_folder=self.cache_dir  # ใช้ cache
+            )
 
             print("🖼️ Loading CLIP model for image embeddings...")
             self.clip_model = CLIPModel.from_pretrained(
-                "openai/clip-vit-large-patch14")
+                "openai/clip-vit-large-patch14",
+                cache_dir=self.cache_dir  # ใช้ cache
+            )
             self.clip_processor = CLIPProcessor.from_pretrained(
-                "openai/clip-vit-large-patch14")
-            self.clip_model.to(self._device)
+                "openai/clip-vit-large-patch14",
+                cache_dir=self.cache_dir  # ใช้ cache
+            )
 
             # Warm up models with dummy inputs
             await self._warmup_models()

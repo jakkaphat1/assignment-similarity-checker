@@ -36,7 +36,7 @@ export default function LoginPage() {
       // เมื่อ Login สำเร็จ เราจะได้รับ access_token กลับมา
       // เก็บ Token นี้ไว้ใน localStorage ของเบราว์เซอร์
       if (data.access_token) {
-        localStorage.setItem("access_token", data.access_token);
+        sessionStorage.setItem("access_token", data.access_token);
         alert("Login successful! Redirecting to dashboard...");
         router.push("/dashboard");
       } else {

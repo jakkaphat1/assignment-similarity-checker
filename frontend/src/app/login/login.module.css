@@ -15,11 +15,12 @@
   width: 100%;
   max-width: 400px;
   text-align: center;
+  color:black;
 }
 
 .form h1 {
   margin-bottom: 1.5rem;
-  color: #333;
+  color:black;
 }
 
 .inputGroup {

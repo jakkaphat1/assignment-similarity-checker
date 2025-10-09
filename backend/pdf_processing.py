@@ -200,7 +200,7 @@ class PDFProcessor:
             print(f"  [ERROR] Image extraction failed for {pdf_path}: {e}")
             return []
     
-    async def process_pdf(self, pdf_path: str, processing_mode: int, 
+    async def process_pdf(self, pdf_path: str,doc_id: str, processing_mode: int, 
                          template_text: Optional[str] = None, 
                          vector_db: VectorDBManager = None) -> Dict[str, Any]:
         """Process a single PDF file based on processing mode"""
