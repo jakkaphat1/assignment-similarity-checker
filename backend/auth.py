@@ -36,13 +36,13 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         user = user_response.user
 
         # Debug
-        print(f"User authenticated: {user.id}")
-        print(f"Header Token: {token[:30]}")
-        print(f"Last Token: {token[-30:]}") 
+        print(f"User authenticated: {user.id} \n")
+        print(f"Header Token: {token[:30]} \n")
+        print(f"Last Token: {token[-30:]} \n") 
 
         return user
     except Exception as e:
-        print(f"❌ Auth failed: {e}")
+        print(f"Auth failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
 

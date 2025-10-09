@@ -21,8 +21,8 @@ class VectorDBManager:
         self._initialized = False
 
         # Configuration
-        self.TEXT_INDEX_NAME = "text-index"
-        self.IMAGE_INDEX_NAME = "image-index"
+        self.TEXT_INDEX_NAME = "text-index-dev"
+        self.IMAGE_INDEX_NAME = "image-index-dev"
         self.TEXT_DIMENSION = 768  # LaBSE dimension
         self.IMAGE_DIMENSION = 768  # CLIP
         self.METRIC = "cosine"
