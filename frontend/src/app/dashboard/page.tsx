@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
@@ -71,16 +72,18 @@ export default function DashboardPage() {
   const router = useRouter();
   // State สำหรับ Authentication
   const [isLoading, setIsLoading] = useState(true);
-
+  const [comparisonResults, setComparisonResults] = useState<ComparisonResult[] | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([])
   const [templateFile, setTemplateFile] = useState<File | null>(null)
   const [processingMode, setProcessingMode] = useState<number>(1)
   const [useTemplate, setUseTemplate] = useState<boolean>(false)
   // const [isUploading, setIsUploading] = useState<boolean>(false)
   const [hasCompared, setHasCompared] = useState<boolean>(false);
-  const [isComparing, setIsComparing] = useState<boolean>(false)
+  // const [isComparing, setIsComparing] = useState<boolean>(false)
   const [uploadResults, setUploadResults] = useState<DocumentResult[]>([])
-  const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([])
+  // const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([])
   // const [documents, setDocuments] = useState<string[]>([])
   const [documents, setDocuments] = useState<DocumentResult[]>([]);
   const [stats, setStats] = useState<Stats | null>(null)
@@ -157,6 +160,31 @@ export default function DashboardPage() {
   const removeTemplateFile = () => {
     setTemplateFile(null)
   }
+
+  const handleCompare = async (batchId: string) => {
+    const idToCompare = batchId; // ใช้ id ที่ส่งมา หรือถ้าไม่มีก็ใช้จาก state
+    if (!idToCompare) {
+      alert("ไม่พบ Batch ID สำหรับการเปรียบเทียบ");
+      return;
+    }
+    setIsComparing(true);
+    setComparisonResults([]); // ล้างผลลัพธ์เก่าก่อนเริ่มการเปรียบเทียบใหม่
+    try {
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE}/compare?batch_id=${idToCompare}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setComparisonResults(response.data);
+    } catch (error) {
+      console.error("Comparison failed:", error);
+      alert("เกิดข้อผิดพลาดในการเปรียบเทียบไฟล์");
+    } finally {
+      setIsComparing(false);
+    }
+  };
+
 //old const handleUpload
   // const handleUpload = async () => {
   //   if (files.length < 2) {
@@ -241,11 +269,6 @@ const fetchDocuments = useCallback (async () => {
 
 //new const handleUpload
 const handleUpload = useCallback (async () => {
-  // 0) ต้องมีไฟล์อย่างน้อย 2 ไฟล์
-  // if (files.length < 2) {
-  //   alert('กรุณาเลือกอย่างน้อย 2 ไฟล์เพื่อทำการอัปโหลดและเปรียบเทียบ');
-  //   return;
-  // }
 
   if (files.length === 0) {
     alert('กรุณาเลือกไฟล์ก่อนอัปโหลด');
@@ -267,15 +290,20 @@ const handleUpload = useCallback (async () => {
   }
 
   setIsLoading(true);
-  // setUploadResults([]);
+  setComparisonResults([]); 
+  setUploadResults([]); 
 
   try {
-    // 3) เตรียมฟอร์มและแนบพารามิเตอร์
+    const batchId = uuidv4(); // สร้าง batchId ใหม่สำหรับทุก ๆ การอัปโหลด
+    console.log(`Uploading with Batch ID: ${batchId}`);
+    
     const token = sessionStorage.getItem('access_token');
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     formData.append('processing_mode', processingMode.toString());
     formData.append('use_template', useTemplate.toString());
+    formData.append('batch_id', batchId);
+
     if (useTemplate && templateFile) {
       formData.append('template_file', templateFile);
     }
@@ -288,15 +316,15 @@ const handleUpload = useCallback (async () => {
       },
       timeout: 300000, // 5 นาที
     });
-
-    // const docs = await fetchDocuments();
-    // if ((docs?.length ?? 0) < 2) {
-    //   alert('เอกสารในระบบยังไม่ถึง 2 ไฟล์');
-    //   return;
-    // }
+    
+    if (response.status === 200 && response.data) {
+      setUploadResults(response.data.results || []); // แสดงผลการอัปโหลด
+      setFiles([]);
+      await handleCompare(batchId); // เริ่มการเปรียบเทียบ
+    }
 
     await fetchDocuments();
-    setFiles([]);
+    
 
   } catch (error: any) {
     console.error('Upload error:', error);
@@ -305,7 +333,7 @@ const handleUpload = useCallback (async () => {
   } finally {
     setIsLoading(false);
   }
-}, [files, processingMode, useTemplate, templateFile, fetchDocuments, router]);
+}, [files, processingMode, useTemplate, templateFile, fetchDocuments, router, handleCompare]);
 
 
 //old const handleCompare
@@ -333,40 +361,42 @@ const handleUpload = useCallback (async () => {
   // }
 
 
-//new const handleCompare
-const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
-  if (docsToCompare.length < 2) {
-    alert('ต้องมีอย่างน้อย 2 เอกสารเพื่อทำการเปรียบเทียบ');
-    return;
-  }
+//new const handleCompare v.1
+// const handleCompare = useCallback (async (batchId: string) => {
 
-  // เช็คโทเค็นก่อนเรียก API
-  const token = sessionStorage.getItem('access_token')
-  if (!token) {
-    alert('กรุณาเข้าสู่ระบบก่อนใช้งาน')
-    router.push('/login')
-    return
-  }
+//   // เช็คโทเค็นก่อนเรียก API
+//   const token = sessionStorage.getItem('access_token')
+//   if (!token) {
+//     alert('กรุณาเข้าสู่ระบบก่อนใช้งาน')
+//     router.push('/login')
+//     return
+//   }
 
-  setIsComparing(true)
-  // setComparisonResults([])
+//   setIsComparing(true)
+//   setComparisonResults(null);
   
-  try {
-    const response = await axios.get(`${API_BASE}/compare`, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 300000 // 5 minutes timeout
-    })
-    // กันกรณี comparisons เป็น undefined/null
-    setComparisonResults(response?.data?.comparisons ?? [])
+//   try {
+//     const response = await axios.get(`${API_BASE}/compare`, {
+//       headers: { Authorization: `Bearer ${token}` },
+//       params: { batch_id: batchId }, // ส่ง batch_id ไปด้วย
+//       timeout: 300000 // 5 minutes timeout
+//     })
+//     // กันกรณี comparisons เป็น undefined/null
+//     // setComparisonResults(response?.data?.comparisons ?? [])
+//     setComparisonResults(response.data ?? []); 
 
-  } catch (error: any) {
-    console.error('Comparison error:', error)
-    const errorMsg = error?.response?.data?.detail || error?.message || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
-    alert(`ข้อผิดพลาด: ${errorMsg}`)
-  } finally {
-    setIsComparing(false)
-  }
-}, [router]);
+//   } catch (error: any) {
+//     console.error('Comparison error:', error)
+//     const errorMsg = error?.response?.data?.detail || error?.message || 'เกิดข้อผิดพลาดในการเปรียบเทียบ'
+//     alert(`ข้อผิดพลาด: ${errorMsg}`)
+//   } finally {
+//     setIsComparing(false)
+//   }
+// }, [router]);
+
+//new const handleCompare v.2
+
+
 
 //old const fetchDocuments
   // const fetchDocuments = async () => {
@@ -442,7 +472,7 @@ const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
   }
 
   const exportResults = () => {
-    if (comparisonResults.length === 0) {
+    if (!comparisonResults || comparisonResults.length === 0) {
       alert('ไม่มีผลการเปรียบเทียบให้ Export')
       return
     }
@@ -474,15 +504,15 @@ const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
     document.body.removeChild(link)
   }  
 
-  useEffect(() => {
-    const readyDocs = documents.filter(doc => doc.status === 'success');
-    if (readyDocs.length >= 2 && !isComparing && !hasCompared) {
-    console.log("useEffect : Starting comparison");
-    setHasCompared(true);
-    handleCompare(readyDocs);
+//   useEffect(() => {
+//     const readyDocs = documents.filter(doc => doc.status === 'success');
+//     if (readyDocs.length >= 2 && !isComparing && !hasCompared) {
+//     console.log("useEffect : Starting comparison");
+//     setHasCompared(true);
+//     handleCompare(readyDocs);
     
-  }
-}, [documents, isComparing,handleCompare, hasCompared]);
+//   }
+// }, [documents, isComparing,handleCompare, hasCompared]);
 
   // ==========================================================
   // ส่วนที่ 4: เงื่อนไขการแสดงผล (Conditional Rendering)
@@ -919,7 +949,7 @@ const handleCompare = useCallback (async (docsToCompare: DocumentResult[]) => {
 
 
         {/* Comparison Results */}
-        {comparisonResults.length > 0 && (
+        {comparisonResults && comparisonResults.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border p-6 mt-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">ผลการเปรียบเทียบ</h2>

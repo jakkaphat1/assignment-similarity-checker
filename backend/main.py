@@ -267,6 +267,7 @@ async def upload_and_process_pdfs_with_auth(
     files: List[UploadFile] = File(...),
     processing_mode: int = Form(1),
     use_template: bool = Form(False),
+    batch_id:str = Form(...), # เพิ่ม batch_id สำหรับติดตามกลุ่มการอัปโหลด
     template_file: Optional[UploadFile] = File(None)
 ):
 
@@ -314,7 +315,8 @@ async def upload_and_process_pdfs_with_auth(
                     "storage_path": storage_path,
                     "user_id": current_user.id,
                     "status": "processing",
-                    "processing_mode": processing_mode
+                    "processing_mode": processing_mode,
+                    "batch_id": batch_id  # บันทึก batch_id ลงในฐานข้อมูล
                 }).execute()
 
                 # 2. PROCESS: ทำงานหนัก (อัปโหลดไป Storage และประมวลผล PDF)
@@ -340,7 +342,9 @@ async def upload_and_process_pdfs_with_auth(
                     doc_id=doc_id,
                     processing_mode=processing_mode,
                     template_text=template_text,
-                    vector_db=vector_db_manager
+                    vector_db=vector_db_manager,
+                    user_id=current_user.id,
+                    batch_id=batch_id
                 )
 
                 # 3. UPDATE: นำผลลัพธ์มาอัปเดตแถวเดิมใน DB
@@ -371,59 +375,262 @@ async def upload_and_process_pdfs_with_auth(
         # supabase.auth.sign_out()
         cleanup_temp_dir(temp_dir)
 
+#old compare_documents
+# @app.get("/compare")
+# async def compare_documents():
+#     """
+#     Compare all processed documents for similarity
 
-@app.get("/compare")
-async def compare_documents():
+#     Returns similarity scores between all document pairs
+#     """
+#     if not pdf_processor or not vector_db_manager:
+#         raise HTTPException(status_code=503, detail="Service not ready")
+
+#     try:
+#         # Get all embeddings from vector database
+#         text_embeddings = await vector_db_manager.get_all_text_embeddings()
+#         image_embeddings, image_hashes = await vector_db_manager.get_all_image_embeddings()
+
+#         # Get document list
+#         doc_ids = list(pdf_processor.get_document_ids())
+
+#         if len(doc_ids) < 2:
+#             return {
+#                 "message": "Need at least 2 documents to compare",
+#                 "comparisons": [],
+#                 "total_documents": len(doc_ids),
+#                 "total_comparisons": 0
+#             }
+
+#         # Perform comparisons
+#         comparison_results = []
+#         for i in range(len(doc_ids)):
+#             for j in range(i + 1, len(doc_ids)):
+#                 id1, id2 = doc_ids[i], doc_ids[j]
+
+#                 # Calculate similarities
+#                 result = pdf_processor.compare_documents(
+#                     id1, id2,
+#                     text_embeddings,
+#                     image_embeddings,
+#                     image_hashes
+#                 )
+
+#                 if result:
+#                     comparison_results.append(result)
+
+#         return {
+#             "comparisons": comparison_results,
+#             "total_documents": len(doc_ids),
+#             "total_comparisons": len(comparison_results)
+#         }
+
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=500, detail=f"Comparison error: {str(e)}")
+        
+        
+#new compare_documents
+# ในไฟล์ main.py
+
+# ใน main.py - แทนที่ฟังก์ชัน compare_documents เดิม
+
+@app.get("/compare", summary="Compare documents within a specific batch")
+async def compare_documents_in_batch(
+    batch_id: str,
+    current_user=Depends(get_current_user)
+):
     """
-    Compare all processed documents for similarity
-
-    Returns similarity scores between all document pairs
+    Compares all documents for the authenticated user within a specific upload batch.
     """
     if not pdf_processor or not vector_db_manager:
         raise HTTPException(status_code=503, detail="Service not ready")
 
+    user_id = current_user.id
+    print(f"\n========== COMPARISON REQUEST ==========")
+    print(f"User ID: {user_id}")
+    print(f"Batch ID: {batch_id}")
+
     try:
-        # Get all embeddings from vector database
-        text_embeddings = await vector_db_manager.get_all_text_embeddings()
-        image_embeddings, image_hashes = await vector_db_manager.get_all_image_embeddings()
+        # 1. ดึงข้อมูลจาก Pinecone
+        text_embeddings_raw, image_embeddings_raw = await vector_db_manager.retrieve_embeddings_for_batch(
+            user_id,
+            batch_id
+        )
 
-        # Get document list
-        doc_ids = list(pdf_processor.get_document_ids())
+        print(f"📊 Retrieved: {len(text_embeddings_raw)} text, {len(image_embeddings_raw)} image embeddings")
 
-        if len(doc_ids) < 2:
-            return {
-                "message": "Need at least 2 documents to compare",
-                "comparisons": [],
-                "total_documents": len(doc_ids),
-                "total_comparisons": 0
-            }
+        if not text_embeddings_raw and not image_embeddings_raw:
+            print(f"⚠️ No embeddings found for batch {batch_id}")
+            return []
 
-        # Perform comparisons
+        # 2. แยก doc_ids
+        doc_ids_set = set()
+        for key in text_embeddings_raw.keys():
+            if key.startswith("text_"):
+                doc_id = key[5:]  # ตัด "text_" ออก
+                doc_ids_set.add(doc_id)
+
+        for key in image_embeddings_raw.keys():
+            if key.startswith("image_"):
+                parts = key.split("_")
+                if len(parts) >= 3:
+                    doc_id = "_".join(parts[1:-1])
+                    doc_ids_set.add(doc_id)
+
+        all_doc_ids = sorted(list(doc_ids_set))
+        print(f"📋 Document IDs: {all_doc_ids}")
+
+        if len(all_doc_ids) < 2:
+            print(f"⚠️ Need at least 2 documents, found {len(all_doc_ids)}")
+            return []
+
+        # 3. ดึงข้อมูลเอกสารจาก Supabase เพื่อเอา text
+        print("\n📚 Loading document texts from Supabase...")
+        doc_texts = {}
+        doc_metadata = {}
+        
+        for doc_id in all_doc_ids:
+            try:
+                # Query document info
+                print(f"DEBUG: Querying Supabase for doc_id='{doc_id}' and user_id='{user_id}'")
+                result = supabase_admin.from_("documents_duplicate") \
+                    .select("*") \
+                    .eq("doc_id", doc_id) \
+                    .eq("user_id", user_id) \
+                    .execute()
+                
+                if result.data and len(result.data) > 0:
+                    doc_info = result.data[0]
+                    storage_path = doc_info.get("storage_path")
+                    processing_mode = doc_info.get("processing_mode", 3)
+                    
+                    # Download PDF from storage และ extract text
+                    if storage_path:
+                        try:
+                            # Download file
+                            file_data = supabase_admin.storage.from_("assignments").download(storage_path)
+                            
+                            # Save to temp file
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                                tmp.write(file_data)
+                                tmp_path = tmp.name
+                            
+                            # Extract text
+                            extracted_text = pdf_processor.extract_text_from_pdf(tmp_path)
+                            doc_texts[doc_id] = extracted_text
+                            
+                            # Clean up temp file
+                            import os
+                            os.unlink(tmp_path)
+                            
+                            print(f"  ✓ {doc_id}: {len(extracted_text)} characters")
+                            
+                        except Exception as e:
+                            print(f"  ⚠️ Could not extract text for {doc_id}: {e}")
+                            doc_texts[doc_id] = ""
+                    
+                    # Store metadata
+                    doc_metadata[doc_id] = {
+                        "processing_mode": processing_mode,
+                        "text_length": len(doc_texts.get(doc_id, "")),
+                        "has_template": False
+                    }
+                    
+            except Exception as e:
+                print(f"  ⚠️ Error loading {doc_id}: {e}")
+                doc_texts[doc_id] = ""
+                doc_metadata[doc_id] = {"processing_mode": 1}
+
+        # 4. อัปเดต pdf_processor ด้วยข้อมูลที่โหลดมา
+        for doc_id, text in doc_texts.items():
+            pdf_processor.raw_texts[doc_id] = text
+            if doc_id in doc_metadata:
+                pdf_processor.document_metadata[doc_id] = doc_metadata[doc_id]
+
+        # 5. เตรียมข้อมูลสำหรับการเปรียบเทียบ
+        text_embeddings_for_compare = text_embeddings_raw
+        
+        # จัดกลุ่ม image embeddings ตาม doc_id
+        image_embeddings_for_compare = {}
+        image_hashes_for_compare = {}
+        
+        for vector_id, embedding in image_embeddings_raw.items():
+            if vector_id.startswith("image_"):
+                parts = vector_id.split("_")
+                if len(parts) >= 3:
+                    doc_id = "_".join(parts[1:-1])
+                    
+                    if doc_id not in image_embeddings_for_compare:
+                        image_embeddings_for_compare[doc_id] = []
+                        image_hashes_for_compare[doc_id] = []
+                    
+                    image_embeddings_for_compare[doc_id].append(embedding)
+                    
+                    # ดึง phash
+                    try:
+                        result = vector_db_manager.image_index.fetch(ids=[vector_id])
+                        if result.vectors and vector_id in result.vectors:
+                            phash = result.vectors[vector_id].metadata.get("phash", "")
+                            image_hashes_for_compare[doc_id].append(phash)
+                    except:
+                        image_hashes_for_compare[doc_id].append("")
+
+        print(f"\n✅ Ready to compare:")
+        print(f"  Text embeddings: {list(text_embeddings_for_compare.keys())}")
+        print(f"  Doc texts loaded: {list(doc_texts.keys())}")
+
+        # 6. เปรียบเทียบทุกคู่
         comparison_results = []
-        for i in range(len(doc_ids)):
-            for j in range(i + 1, len(doc_ids)):
-                id1, id2 = doc_ids[i], doc_ids[j]
-
-                # Calculate similarities
+        total_pairs = (len(all_doc_ids) * (len(all_doc_ids) - 1)) // 2
+        print(f"\n🔄 Starting {total_pairs} comparisons...")
+        
+        for i in range(len(all_doc_ids)):
+            for j in range(i + 1, len(all_doc_ids)):
+                id1, id2 = all_doc_ids[i], all_doc_ids[j]
+                
+                print(f"\n  Comparing: {id1} vs {id2}")
+                
                 result = pdf_processor.compare_documents(
-                    id1, id2,
-                    text_embeddings,
-                    image_embeddings,
-                    image_hashes
+                    id1,
+                    id2,
+                    text_embeddings_for_compare,
+                    image_embeddings_for_compare,
+                    image_hashes_for_compare
                 )
-
+                
                 if result:
+                    print(f"    ✓ Combined score: {result['combined_score']:.4f}")
                     comparison_results.append(result)
+                else:
+                    print(f"    ⚠️ Comparison returned None")
 
-        return {
-            "comparisons": comparison_results,
-            "total_documents": len(doc_ids),
-            "total_comparisons": len(comparison_results)
-        }
+        # 7. เรียงลำดับผลลัพธ์
+        sorted_results = sorted(
+            comparison_results,
+            key=lambda x: x["combined_score"],
+            reverse=True
+        )
+        
+        print(f"\n========== COMPARISON COMPLETE ==========")
+        print(f"Total comparisons: {len(sorted_results)}")
+        if sorted_results:
+            print(f"Highest score: {sorted_results[0]['combined_score']:.4f}")
+            print(f"Lowest score: {sorted_results[-1]['combined_score']:.4f}")
+        
+        return sorted_results
 
     except Exception as e:
+        print(f"❌ Error during comparison: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=500, detail=f"Comparison error: {str(e)}")
+            status_code=500, 
+            detail=f"Comparison error: {str(e)}"
+        )  
+        
+        
 
 #old def get_documents
 # @app.get("/documents, response_model=List[DocumentResult]")
@@ -549,3 +756,173 @@ async def get_stats():
 #         reload=True,
 #         log_level="info"
 #     )
+
+# เพิ่ม endpoint นี้ใน main.py เพื่อ debug
+
+@app.get("/debug/simple/{batch_id}")
+async def simple_debug(batch_id: str):
+    """Simple debug endpoint - ดูว่ามีข้อมูลอะไรใน Pinecone บ้าง"""
+    if not vector_db_manager or not vector_db_manager.is_connected():
+        return {"error": "Vector DB not connected"}
+    
+    try:
+        print(f"\n========== SIMPLE DEBUG: {batch_id} ==========")
+        
+        result = {
+            "batch_id": batch_id,
+            "text_vectors": [],
+            "image_vectors": [],
+            "errors": []
+        }
+        
+        # 1. ดู text index
+        try:
+            print("Querying text index...")
+            text_response = vector_db_manager.text_index.query(
+                vector=[0.0] * 768,  # TEXT_DIMENSION
+                top_k=100,
+                include_metadata=True
+            )
+            
+            print(f"Found {len(text_response.matches)} text vectors")
+            
+            for match in text_response.matches:
+                vec_info = {
+                    "id": match.id,
+                    "metadata": match.metadata if match.metadata else {}
+                }
+                result["text_vectors"].append(vec_info)
+                
+                # แสดงใน console
+                print(f"  Text Vector: {match.id}")
+                if match.metadata:
+                    print(f"    Metadata: {match.metadata}")
+                    
+        except Exception as e:
+            error_msg = f"Text index error: {str(e)}"
+            print(f"❌ {error_msg}")
+            result["errors"].append(error_msg)
+        
+        # 2. ดู image index
+        try:
+            print("\nQuerying image index...")
+            image_response = vector_db_manager.image_index.query(
+                vector=[0.0] * 768,  # IMAGE_DIMENSION
+                top_k=100,
+                include_metadata=True
+            )
+            
+            print(f"Found {len(image_response.matches)} image vectors")
+            
+            for match in image_response.matches:
+                vec_info = {
+                    "id": match.id,
+                    "metadata": match.metadata if match.metadata else {}
+                }
+                result["image_vectors"].append(vec_info)
+                
+                # แสดงใน console
+                print(f"  Image Vector: {match.id}")
+                if match.metadata:
+                    print(f"    Metadata: {match.metadata}")
+                    
+        except Exception as e:
+            error_msg = f"Image index error: {str(e)}"
+            print(f"❌ {error_msg}")
+            result["errors"].append(error_msg)
+        
+        # 3. Filter เฉพาะ batch นี้
+        result["batch_text_vectors"] = [
+            v for v in result["text_vectors"]
+            if v.get("metadata", {}).get("batch_id") == batch_id
+        ]
+        
+        result["batch_image_vectors"] = [
+            v for v in result["image_vectors"]
+            if v.get("metadata", {}).get("batch_id") == batch_id
+        ]
+        
+        print(f"\n========== SUMMARY ==========")
+        print(f"Total text vectors: {len(result['text_vectors'])}")
+        print(f"Total image vectors: {len(result['image_vectors'])}")
+        print(f"Batch text vectors: {len(result['batch_text_vectors'])}")
+        print(f"Batch image vectors: {len(result['batch_image_vectors'])}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.get("/debug/test-filter/{batch_id}")
+async def test_filter(batch_id: str):
+    """ทดสอบว่า filter ใน Pinecone ทำงานหรือไม่"""
+    if not vector_db_manager or not vector_db_manager.is_connected():
+        return {"error": "Vector DB not connected"}
+    
+    try:
+        print(f"\n========== TESTING FILTER: {batch_id} ==========")
+        
+        # ทดสอบ filter แบบต่างๆ
+        test_results = {}
+        
+        # Test 1: ไม่ใช้ filter
+        try:
+            response = vector_db_manager.text_index.query(
+                vector=[0.0] * 768,
+                top_k=10,
+                include_metadata=True
+            )
+            test_results["no_filter"] = {
+                "count": len(response.matches),
+                "vectors": [{"id": m.id, "metadata": m.metadata} for m in response.matches]
+            }
+            print(f"No filter: {len(response.matches)} results")
+        except Exception as e:
+            test_results["no_filter"] = {"error": str(e)}
+        
+        # Test 2: Filter แบบ $eq
+        try:
+            response = vector_db_manager.text_index.query(
+                vector=[0.0] * 768,
+                top_k=10,
+                filter={"batch_id": {"$eq": batch_id}},
+                include_metadata=True
+            )
+            test_results["filter_eq"] = {
+                "count": len(response.matches),
+                "vectors": [{"id": m.id, "metadata": m.metadata} for m in response.matches]
+            }
+            print(f"Filter $eq: {len(response.matches)} results")
+        except Exception as e:
+            test_results["filter_eq"] = {"error": str(e)}
+        
+        # Test 3: Filter แบบง่าย
+        try:
+            response = vector_db_manager.text_index.query(
+                vector=[0.0] * 768,
+                top_k=10,
+                filter={"batch_id": batch_id},
+                include_metadata=True
+            )
+            test_results["filter_simple"] = {
+                "count": len(response.matches),
+                "vectors": [{"id": m.id, "metadata": m.metadata} for m in response.matches]
+            }
+            print(f"Filter simple: {len(response.matches)} results")
+        except Exception as e:
+            test_results["filter_simple"] = {"error": str(e)}
+        
+        return {
+            "batch_id": batch_id,
+            "tests": test_results
+        }
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}

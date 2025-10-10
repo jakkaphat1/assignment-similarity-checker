@@ -138,8 +138,7 @@ class VectorDBManager:
             self.image_index is not None
         )
 
-    async def upsert_text_embedding(self, doc_id: str, embedding: np.ndarray,
-                                    metadata: Dict[str, Any] = None) -> bool:
+    async def upsert_text_embedding(self, doc_id: str, embedding: np.ndarray, text: str, user_id: str, batch_id: str) -> bool:
         """Upsert single text embedding"""
         if not self.is_connected():
             raise RuntimeError("Vector database not initialized")
@@ -153,11 +152,10 @@ class VectorDBManager:
             vector_metadata = {
                 "type": "text",
                 "doc_id": doc_id,
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "user_id": user_id,    # เพิ่ม user_id ใน metadata
+                "batch_id": batch_id
             }
-
-            if metadata:
-                vector_metadata.update(metadata)
 
             # Upsert to Pinecone
             self.text_index.upsert([(vector_id, vector_data, vector_metadata)])
@@ -169,8 +167,7 @@ class VectorDBManager:
             print(f"❌ Error upserting text embedding for {doc_id}: {e}")
             return False
 
-    async def upsert_image_embeddings(self, doc_id: str, image_items: List[Dict],
-                                      metadata: Dict[str, Any] = None) -> bool:
+    async def upsert_image_embeddings(self, doc_id: str, image_items: List[Dict], user_id: str, batch_id: str) -> bool:
         """Upsert multiple image embeddings for a document"""
         if not self.is_connected():
             raise RuntimeError("Vector database not initialized")
@@ -195,11 +192,11 @@ class VectorDBManager:
                     "doc_id": doc_id,
                     "image_index": i,
                     "phash": item.get("phash_hex", ""),
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "user_id": user_id,    # เพิ่ม user_id ใน metadata
+                    "batch_id": batch_id
                 }
 
-                if metadata:
-                    vector_metadata.update(metadata)
 
                 upsert_data.append((vector_id, vector_data, vector_metadata))
 
@@ -285,6 +282,91 @@ class VectorDBManager:
             print(f"❌ Error retrieving image embeddings: {e}")
             return {}, {}
 
+    async def retrieve_embeddings_for_batch(self, user_id: str, batch_id: str) -> Tuple[Dict, Dict]:
+        """
+        ดึง embeddings ทั้งหมดจาก batch_id ที่ระบุ
+        Returns: (text_embeddings_dict, image_embeddings_dict)
+        
+        text_embeddings_dict format: {vector_id: numpy_array}
+        image_embeddings_dict format: {vector_id: numpy_array}
+        """
+        if not self.is_connected():
+            print("❌ Not connected to Pinecone")
+            return {}, {}
+
+        try:
+            print(f"\n========== RETRIEVING EMBEDDINGS ==========")
+            print(f"User ID: {user_id}")
+            print(f"Batch ID: {batch_id}")
+            
+            # สร้าง filter สำหรับ Pinecone
+            batch_filter = {
+                "user_id": {"$eq": user_id},
+                "batch_id": {"$eq": batch_id}
+            }
+            
+            # 1. ดึงข้อมูล Text embeddings
+            text_embeddings = {}
+            try:
+                print("\n📚 Querying text embeddings...")
+                text_results = self.text_index.query(
+                    vector=[0.0] * self.TEXT_DIMENSION,
+                    filter=batch_filter,
+                    top_k=10000,
+                    include_values=True,  # ⚠️ สำคัญ: ต้องมี values
+                    include_metadata=True
+                )
+                
+                print(f"Text query returned {len(text_results.matches)} results")
+                
+                for match in text_results.matches:
+                    # เก็บเป็น numpy array โดยใช้ vector_id เดิม (text_doc_id)
+                    vector_id = match.id  # เช่น "text_lab1_633050254_7"
+                    text_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
+                    print(f"  ✓ {vector_id}")
+                
+            except Exception as e:
+                print(f"⚠️ Error querying text embeddings: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # 2. ดึงข้อมูล Image embeddings
+            image_embeddings = {}
+            try:
+                print("\n🖼️ Querying image embeddings...")
+                image_results = self.image_index.query(
+                    vector=[0.0] * self.IMAGE_DIMENSION,
+                    filter=batch_filter,
+                    top_k=10000,
+                    include_values=True,  # ⚠️ สำคัญ: ต้องมี values
+                    include_metadata=True
+                )
+                
+                print(f"Image query returned {len(image_results.matches)} results")
+                
+                for match in image_results.matches:
+                    # เก็บเป็น numpy array โดยใช้ vector_id เดิม (image_doc_id_index)
+                    vector_id = match.id  # เช่น "image_lab1_633050254_7_0"
+                    image_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
+                    print(f"  ✓ {vector_id}")
+                
+            except Exception as e:
+                print(f"⚠️ Error querying image embeddings: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            print(f"\n========== RETRIEVAL COMPLETE ==========")
+            print(f"Text embeddings: {len(text_embeddings)}")
+            print(f"Image embeddings: {len(image_embeddings)}")
+            
+            return text_embeddings, image_embeddings
+
+        except Exception as e:
+            print(f"❌ Error retrieving embeddings for batch {batch_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}, {}
+    
     async def delete_document_embeddings(self, doc_id: str) -> bool:
         """Delete all embeddings for a specific document"""
         if not self.is_connected():

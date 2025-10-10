@@ -200,9 +200,15 @@ class PDFProcessor:
             print(f"  [ERROR] Image extraction failed for {pdf_path}: {e}")
             return []
     
-    async def process_pdf(self, pdf_path: str,doc_id: str, processing_mode: int, 
-                         template_text: Optional[str] = None, 
-                         vector_db: VectorDBManager = None) -> Dict[str, Any]:
+    async def process_pdf(self, 
+                          pdf_path: str,
+                          doc_id: str, 
+                          processing_mode: int, 
+                          user_id:str,
+                          batch_id:str,
+                          template_text: Optional[str] = None, 
+                          vector_db: VectorDBManager = None,
+                          ) -> Dict[str, Any]:
         """Process a single PDF file based on processing mode"""
         doc_id = to_ascii_id(os.path.basename(pdf_path).split('.')[0])
         
@@ -238,7 +244,12 @@ class PDFProcessor:
                 
                 # Store in vector database
                 if vector_db:
-                    await vector_db.upsert_text_embedding(doc_id, text_embedding)
+                    await vector_db.upsert_text_embedding(
+                        doc_id, 
+                        text_embedding,
+                        clean_text,
+                        user_id=user_id,
+                        batch_id=batch_id)
                 
                 # Store locally
                 self.raw_texts[doc_id] = clean_text
@@ -295,9 +306,14 @@ class PDFProcessor:
                 
                 # Store in vector database
                 if vector_db:
-                    await vector_db.upsert_text_embedding(doc_id, text_embedding)
+                    await vector_db.upsert_text_embedding(doc_id, 
+                                                          text_embedding,
+                                                            clean_text,
+                                                          user_id=user_id,
+                                                          batch_id=batch_id)
                     if image_embeddings:
-                        await vector_db.upsert_image_embeddings(doc_id, image_embeddings)
+                        await vector_db.upsert_image_embeddings(doc_id, image_embeddings,user_id=user_id,
+            batch_id=batch_id)
                 
                 # Store locally
                 self.raw_texts[doc_id] = clean_text

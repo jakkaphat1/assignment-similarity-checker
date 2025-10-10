@@ -13,6 +13,8 @@ if __name__ == "__main__":
             "supabase_client.py",
             "utils.py",
             "pdf_processing.py",
+            "embedding.py",
+            "vector_db.py",
             # ไม่ใส่ embedding.py และ vector_db.py
         ],
         log_level="info"
