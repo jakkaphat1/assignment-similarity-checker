@@ -810,9 +810,11 @@ const handleUpload = useCallback (async () => {
               </div>
               
               <div className="mb-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  ไฟล์ที่เลือก (รออัปโหลด) {files.length > 0 ? `• ${files.length} ไฟล์` : ''}
-                </h3>
+                {files.length > 0 && uploadResults.length === 0 && (
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">
+                    ไฟล์ที่เลือก (รออัปโหลด) • {files.length} ไฟล์
+                  </h3>
+                )}
                 {files.length > 0 ? (
                   <div className="space-y-2">
                     {files.map((file, index) => (
@@ -833,9 +835,11 @@ const handleUpload = useCallback (async () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-500">ยังไม่มีไฟล์ที่เลือก</p>
+                  uploadResults.length === 0 && (
+                    <p className="text-xs text-gray-500">ยังไม่มีไฟล์ที่เลือก</p>
+                  )
                 )}
-                <div className="border-t mt-4 pt-4" />
+                <div className="border-t mt-4 pt-4 " />
               </div>
 
               {documents.length > 0 ? (
@@ -843,7 +847,7 @@ const handleUpload = useCallback (async () => {
                   {documents.map((doc, index) => (
                     <div key={index} className="flex items-center p-2 bg-gray-50 rounded">
                       <FileText className="w-4 h-4 text-gray-600 mr-2" />
-                      <span className="font-medium">{doc.doc_id}</span>
+                      <span className="font-medium text-black">{doc.doc_id}</span>
                     </div>
                   ))}
                 </div>
