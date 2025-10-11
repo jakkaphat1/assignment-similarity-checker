@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [documents, setDocuments] = useState<DocumentResult[]>([]);
   const [stats, setStats] = useState<Stats | null>(null)
   const [showStats, setShowStats] = useState<boolean>(false)
+  const [lastBatchId, setLastBatchId] = useState<string | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFiles = acceptedFiles.filter(file => file.type === 'application/pdf')
@@ -137,9 +138,10 @@ export default function DashboardPage() {
   // ==========================================================
   // ส่วนที่ 2: useEffect สำหรับจัดการ Logic ที่ต้องทำครั้งเดียว
   // ==========================================================
+
+
   useEffect(() =>{
     const token = sessionStorage.getItem('access_token');
-
     if (!token){
       alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
       router.push('/login');
@@ -251,20 +253,30 @@ export default function DashboardPage() {
   //   }
   // }
 
-const fetchDocuments = useCallback (async () => {
+const fetchDocuments = useCallback (async (batchId?: string) => {
   try {
     const token = sessionStorage.getItem('access_token')
     const headers: Record<string, string> = {}
     if (token) headers.Authorization = `Bearer ${token}`
 
-    const response = await axios.get<DocumentResult[]>(`${API_BASE}/documents`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const url = batchId
+      ? `${API_BASE}/documents?batch_id=${batchId}`
+      : `${API_BASE}/documents`;
+
+    const response = await axios.get<DocumentResult[]>(url, { headers });
     setDocuments(response.data); 
     } catch (error) {
     console.error('Failed to fetch documents:', error);
   }
 }, []);
+
+useEffect(() => {
+    const token = sessionStorage.getItem('access_token');
+    if (token && lastBatchId) {
+      fetchDocuments(lastBatchId); 
+    }
+  }, [lastBatchId, fetchDocuments]);
+
 
 
 //new const handleUpload
@@ -320,10 +332,14 @@ const handleUpload = useCallback (async () => {
     if (response.status === 200 && response.data) {
       setUploadResults(response.data.results || []); // แสดงผลการอัปโหลด
       setFiles([]);
+
+      setLastBatchId(batchId); // เก็บ batchId ล่าสุด
+
       await handleCompare(batchId); // เริ่มการเปรียบเทียบ
+      await fetchDocuments(batchId);
     }
 
-    await fetchDocuments();
+    // await fetchDocuments();
     
 
   } catch (error: any) {
@@ -802,7 +818,7 @@ const handleUpload = useCallback (async () => {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">เอกสารในระบบ</h2>
                 <button
-                  onClick={fetchDocuments}
+                  onClick={() => fetchDocuments()}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <RefreshCw className="w-4 h-4" />

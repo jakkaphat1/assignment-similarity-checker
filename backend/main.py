@@ -498,6 +498,9 @@ async def compare_documents_in_batch(
                     .select("*") \
                     .eq("doc_id", doc_id) \
                     .eq("user_id", user_id) \
+                    .eq("batch_id", batch_id) \
+                    .order("created_at", desc=True) \
+                    .limit(1) \
                     .execute()
                 
                 if result.data and len(result.data) > 0:
@@ -669,7 +672,7 @@ async def compare_documents_in_batch(
 #     }
 #new def get_documents
 @app.get("/documents", response_model=List[DocumentResult])
-async def get_documents(user=Depends(get_current_user)):
+async def get_documents(user=Depends(get_current_user), batch_id: Optional[str] = None):
     """ดึงรายการเอกสารทั้งหมดของผู้ใช้จากฐานข้อมูล Supabase โดยตรง"""
     try:
         # ใช้ supabase_admin เพื่อให้มีสิทธิ์อ่านข้อมูลจากฝั่ง server
@@ -680,6 +683,7 @@ async def get_documents(user=Depends(get_current_user)):
         query_res = supabase_admin.from_("documents_duplicate") \
                                   .select("doc_id, status, processing_mode, text_length, image_count, removed_text_length, error") \
                                   .eq("user_id", user.id) \
+                                  .eq("batch_id",batch_id) \
                                   .execute()
 
         if query_res.data:
