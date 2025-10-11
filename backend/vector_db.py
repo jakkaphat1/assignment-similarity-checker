@@ -305,6 +305,9 @@ class VectorDBManager:
                 "batch_id": {"$eq": batch_id}
             }
             
+            import asyncio
+            await asyncio.sleep(2)
+            
             # 1. ดึงข้อมูล Text embeddings
             text_embeddings = {}
             try:

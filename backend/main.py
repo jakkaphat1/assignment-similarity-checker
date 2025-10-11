@@ -505,8 +505,10 @@ async def compare_documents_in_batch(
                     storage_path = doc_info.get("storage_path")
                     processing_mode = doc_info.get("processing_mode", 3)
                     
+                    need_text = processing_mode in [1, 3]
+                    
                     # Download PDF from storage และ extract text
-                    if storage_path:
+                    if need_text and storage_path:
                         try:
                             # Download file
                             file_data = supabase_admin.storage.from_("assignments").download(storage_path)
@@ -525,11 +527,14 @@ async def compare_documents_in_batch(
                             import os
                             os.unlink(tmp_path)
                             
-                            print(f"  ✓ {doc_id}: {len(extracted_text)} characters")
+                            print(f"  ✓ {doc_id}: {len(extracted_text)} characters (Mode {processing_mode})")
                             
                         except Exception as e:
                             print(f"  ⚠️ Could not extract text for {doc_id}: {e}")
                             doc_texts[doc_id] = ""
+                    else:
+                        doc_texts[doc_id] = ""
+                        print(f"  {doc_id}: Skipping text extraction (Mode {processing_mode} - Image Only)")
                     
                     # Store metadata
                     doc_metadata[doc_id] = {

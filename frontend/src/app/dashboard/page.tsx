@@ -954,22 +954,28 @@ const handleUpload = useCallback (async () => {
 
         {/* Comparison Results */}
         {comparisonResults && comparisonResults.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm border p-6 mt-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">ผลการเปรียบเทียบ</h2>
-              <button
-                onClick={exportResults}
-                className="flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export CSV
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {comparisonResults
-                .sort((a, b) => b.combined_score - a.combined_score)
-                .map((result, index) => (
+        <div className="bg-white rounded-lg shadow-sm border p-6 mt-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">ผลการเปรียบเทียบ</h2>
+            <button
+              onClick={exportResults}
+              className="flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {comparisonResults
+              .sort((a, b) => b.combined_score - a.combined_score)
+              .map((result, index) => {
+                // 🔥 เช็คว่าเป็นโหมดไหน
+                const isImageOnly = result.processing_mode === 2;
+                const isTextOnly = result.processing_mode === 1;
+                const isBoth = result.processing_mode === 3;
+                
+                return (
                   <div key={index} className="border rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-4">
@@ -988,47 +994,77 @@ const handleUpload = useCallback (async () => {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-blue-600">
-                          {formatScore(result.text_similarity)}
-                        </div>
-                        <div className="text-sm text-gray-600">ความคล้ายข้อความ</div>
-                      </div>
+                    {/* 🔥 แสดงผลตาม processing_mode */}
+                    <div className={`grid ${isImageOnly ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-4'} gap-4`}>
                       
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-purple-600">
-                          {formatScore(result.semantic_similarity)}
-                        </div>
-                        <div className="text-sm text-gray-600">Semantic</div>
-                      </div>
+                      {/* แสดงค่า Text เฉพาะโหมด 1 และ 3 */}
+                      {!isImageOnly && (
+                        <>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-blue-600">
+                              {formatScore(result.text_similarity)}
+                            </div>
+                            <div className="text-sm text-gray-600">ความคล้ายข้อความ</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-purple-600">
+                              {formatScore(result.semantic_similarity)}
+                            </div>
+                            <div className="text-sm text-gray-600">Semantic</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-indigo-600">
+                              {formatScore(result.lexical_similarity)}
+                            </div>
+                            <div className="text-sm text-gray-600">Lexical</div>
+                          </div>
+                        </>
+                      )}
                       
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-indigo-600">
-                          {formatScore(result.lexical_similarity)}
+                      {/* แสดงค่า Image เฉพาะโหมด 2 และ 3 */}
+                      {!isTextOnly && (
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-green-600">
+                            {formatScore(result.image_similarity)}
+                          </div>
+                          <div className="text-sm text-gray-600">ความคล้ายรูปภาพ</div>
                         </div>
-                        <div className="text-sm text-gray-600">Lexical</div>
-                      </div>
+                      )}
                       
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-green-600">
-                          {formatScore(result.image_similarity)}
-                        </div>
-                        <div className="text-sm text-gray-600">ความคล้ายรูปภาพ</div>
-                      </div>
+                      {/* แสดงรายละเอียดรูปภาพเพิ่มเติมสำหรับโหมด 2 */}
+                      {isImageOnly && result.total_images > 0 && (
+                        <>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-blue-600">
+                              {formatScore(result.image_cosine_avg)}
+                            </div>
+                            <div className="text-sm text-gray-600">Cosine Avg</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-purple-600">
+                              {formatScore(result.image_phash_avg)}
+                            </div>
+                            <div className="text-sm text-gray-600">pHash Avg</div>
+                          </div>
+                        </>
+                      )}
                     </div>
                     
-                    {result.total_images > 0 && (
+                    {/* รายละเอียดรูปภาพ */}
+                    {!isTextOnly && result.total_images > 0 && (
                       <div className="mt-4 pt-4 border-t">
                         <div className="text-sm text-gray-600">
                           <span className="font-medium">รูปภาพที่ตรงกัน:</span> {result.matched_images} / {result.total_images} รูป
-                          {result.image_cosine_avg > 0 && (
+                          {!isImageOnly && result.image_cosine_avg > 0 && (
                             <>
                               {' | '}
                               <span className="font-medium">Cosine Avg:</span> {formatScore(result.image_cosine_avg)}
                             </>
                           )}
-                          {result.image_phash_avg > 0 && (
+                          {!isImageOnly && result.image_phash_avg > 0 && (
                             <>
                               {' | '}
                               <span className="font-medium">pHash Avg:</span> {formatScore(result.image_phash_avg)}
@@ -1038,10 +1074,11 @@ const handleUpload = useCallback (async () => {
                       </div>
                     )}
                   </div>
-                ))}
-            </div>
+                );
+              })}
           </div>
-        )}
+        </div>
+      )}
       </div>
     </div>
   )
