@@ -558,28 +558,37 @@ async def compare_documents_in_batch(
         
         for vector_id, embedding in image_embeddings_raw.items():
             if vector_id.startswith("image_"):
-                parts = vector_id.split("_")
-                if len(parts) >= 3:
-                    doc_id = "_".join(parts[1:-1])
+                # parts = vector_id.split("_")
+                remaining = vector_id[6:]  
+                parts = remaining.split("_")
+                if len(parts) >= 2:
+                    doc_id = "_".join(parts[:-1])
                     
-                    if doc_id not in image_embeddings_for_compare:
-                        image_embeddings_for_compare[doc_id] = []
-                        image_hashes_for_compare[doc_id] = []
+                    image_embeddings_for_compare[vector_id] = embedding
                     
-                    image_embeddings_for_compare[doc_id].append(embedding)
+                    # if doc_id not in image_embeddings_for_compare:
+                    #     image_embeddings_for_compare[doc_id] = []
+                    #     image_hashes_for_compare[doc_id] = []
+                    
+                    # image_embeddings_for_compare[doc_id].append(embedding)
                     
                     # ดึง phash
                     try:
                         result = vector_db_manager.image_index.fetch(ids=[vector_id])
                         if result.vectors and vector_id in result.vectors:
                             phash = result.vectors[vector_id].metadata.get("phash", "")
-                            image_hashes_for_compare[doc_id].append(phash)
-                    except:
-                        image_hashes_for_compare[doc_id].append("")
+                            image_hashes_for_compare[vector_id] = phash
+                        else:
+                            image_hashes_for_compare[vector_id] = ""
+                    except Exception as e:
+                        print(f"  ⚠️ Could not fetch phash for {vector_id}: {e}")
+                        image_hashes_for_compare[vector_id] = ""
 
-        print(f"\n✅ Ready to compare:")
+        print(f"\nReady to compare:")
         print(f"  Text embeddings: {list(text_embeddings_for_compare.keys())}")
         print(f"  Doc texts loaded: {list(doc_texts.keys())}")
+        print(f"  Image embeddings: {len(image_embeddings_for_compare)} vectors")
+        print(f"  Image vector IDs sample: {list(image_embeddings_for_compare.keys())[:3]}")
 
         # 6. เปรียบเทียบทุกคู่
         comparison_results = []

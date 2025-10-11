@@ -271,7 +271,10 @@ class PDFProcessor:
                 
                 # Store in vector database
                 if vector_db and image_embeddings:
-                    await vector_db.upsert_image_embeddings(doc_id, image_embeddings)
+                    await vector_db.upsert_image_embeddings(doc_id, 
+                                                            image_embeddings,
+                                                            user_id=user_id,
+                                                            batch_id=batch_id)
                 
                 # Store metadata
                 self.raw_texts[doc_id] = ""  # No text in image-only mode
