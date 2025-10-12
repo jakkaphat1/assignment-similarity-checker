@@ -306,30 +306,31 @@ class VectorDBManager:
             }
             
             import asyncio
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
             
             # 1. ดึงข้อมูล Text embeddings
             text_embeddings = {}
             try:
-                print("\n📚 Querying text embeddings...")
+                print("\n Querying text embeddings...")
                 text_results = self.text_index.query(
                     vector=[0.0] * self.TEXT_DIMENSION,
                     filter=batch_filter,
                     top_k=10000,
-                    include_values=True,  # ⚠️ สำคัญ: ต้องมี values
+                    include_values=True, 
                     include_metadata=True
                 )
                 
                 print(f"Text query returned {len(text_results.matches)} results")
                 
                 for match in text_results.matches:
-                    # เก็บเป็น numpy array โดยใช้ vector_id เดิม (text_doc_id)
-                    vector_id = match.id  # เช่น "text_lab1_633050254_7"
-                    text_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
-                    print(f"  ✓ {vector_id}")
+                    meta = match.metadata or {}
+                    if meta.get("batch_id") == batch_id and meta.get("user_id") == user_id:
+                        vector_id = match.id
+                        text_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
+                        print(f"   ✓ {vector_id}")
                 
             except Exception as e:
-                print(f"⚠️ Error querying text embeddings: {e}")
+                print(f"🟡 Error querying text embeddings: {e}")
                 import traceback
                 traceback.print_exc()
             
@@ -348,10 +349,11 @@ class VectorDBManager:
                 print(f"Image query returned {len(image_results.matches)} results")
                 
                 for match in image_results.matches:
-                    # เก็บเป็น numpy array โดยใช้ vector_id เดิม (image_doc_id_index)
-                    vector_id = match.id  # เช่น "image_lab1_633050254_7_0"
-                    image_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
-                    print(f"  ✓ {vector_id}")
+                    meta = match.metadata or {}
+                    if meta.get("batch_id") == batch_id and meta.get("user_id") == user_id:
+                        vector_id = match.id
+                        image_embeddings[vector_id] = np.array(match.values, dtype=np.float32)
+                        print(f"   ✓ {vector_id}")
                 
             except Exception as e:
                 print(f"⚠️ Error querying image embeddings: {e}")
