@@ -7,6 +7,10 @@ from utils import cleanup_temp_dir, validate_pdf_files
 from vector_db import VectorDBManager
 from embedding import EmbeddingManager
 from pdf_processing import PDFProcessor
+from clustering_utils import cluster_by_threshold
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from clustering_utils import cluster_by_threshold
 from contextlib import asynccontextmanager
 from pathlib import Path
 import shutil
@@ -61,6 +65,16 @@ vector_db_manager = None
 # async def login():
 #     """Simple login endpoint (placeholder)"""
 #     return {"message": "Login successful"}
+
+class Pair(BaseModel):
+    doc_1: str
+    doc_2: str
+    final_score: Optional[float] = None
+    combined_score: Optional[float] = None
+
+class ClusterReq(BaseModel):
+    threshold: float = Field(0.8, ge=0.0, le=1.0)
+    pairs: List[Pair]
 
 
 @app.on_event("startup")
@@ -696,6 +710,31 @@ async def get_documents(user=Depends(get_current_user), batch_id: Optional[str] 
     except Exception as e:
         print(f"Error fetching documents from Supabase: {e}")
         raise HTTPException(status_code=500, detail="Could not fetch documents from database.")
+
+
+@app.post("/cluster")
+async def cluster_documents(payload: ClusterReq, current_user=Depends(get_current_user)):
+    """
+    รับผล pair จาก /compare แล้วจัดกลุ่มตาม threshold
+    pairs สามารถส่ง final_score หรือ combined_score มาก็ได้ (อย่างใดอย่างหนึ่ง)
+    """
+    import pandas as pd
+
+    rows = []
+    for p in payload.pairs:
+        # เลือกคะแนนจาก final_score ถ้ามี ไม่งั้น fallback เป็น combined_score
+        score = p.final_score if p.final_score is not None else (p.combined_score or 0.0)
+        rows.append({"doc_1": p.doc_1, "doc_2": p.doc_2, "final_score": float(score)})
+
+    df = pd.DataFrame(rows, columns=["doc_1", "doc_2", "final_score"])
+    clusters = cluster_by_threshold(df, payload.threshold)
+    return {
+        "threshold": payload.threshold,
+        "cluster_count": len(clusters),
+        "clusters": clusters
+    }
+
+
 
 
 @app.delete("/documents")

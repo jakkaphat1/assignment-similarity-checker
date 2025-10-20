@@ -89,6 +89,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [showStats, setShowStats] = useState<boolean>(false)
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState(0.8);
+  const [clusters, setClusters] = useState<any[] | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFiles = acceptedFiles.filter(file => file.type === 'application/pdf')
@@ -334,7 +336,7 @@ const handleUpload = useCallback (async () => {
       setFiles([]);
 
       setLastBatchId(batchId); // เก็บ batchId ล่าสุด
-
+      sessionStorage.setItem('last_batch_id', batchId); //โค้ดใหม่
       await handleCompare(batchId); // เริ่มการเปรียบเทียบ
       await fetchDocuments(batchId);
     }
@@ -455,6 +457,22 @@ const handleUpload = useCallback (async () => {
     }
   }
 
+  // const handleCluster = async () => {
+  //   setIsLoading(true);
+  //   try {
+  //     const token = sessionStorage.getItem("access_token");
+  //     const res = await axios.post(`${API_BASE}/cluster`, { threshold }, {
+  //       headers: { Authorization: `Bearer ${token}` }
+  //     });
+  //     setClusters(res.data.clusters);
+  //   } catch (e) {
+  //     alert("เกิดข้อผิดพลาดในการจัดกลุ่ม");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
+
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'เหมือนมาก': return 'text-red-600 bg-red-50 border-red-200'
@@ -555,6 +573,13 @@ const handleUpload = useCallback (async () => {
               <p className="text-sm text-gray-600 mt-1">Assignment Similarity Checker</p>
             </div>
             <div className="flex items-center space-x-3">
+              <button
+                onClick={() => router.push('/cluster')}
+                className="flex items-center px-3 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-300 rounded-md hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Clustering
+              </button>
               <button
                 onClick={fetchStats}
                 className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
